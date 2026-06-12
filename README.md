@@ -68,6 +68,19 @@ npm run check
 
 This validates JavaScript syntax and checks required manifest files.
 
+## Repository Contents
+
+- `manifest.json`: Chrome extension manifest
+- `content.js`: ChatGPT permission-card detection and auto-click logic
+- `options.html`, `options.css`, `options.js`: extension options page
+- `icons/`: extension icons
+- `scripts/validate-manifest.js`: lightweight manifest validation
+- `.github/workflows/validate.yml`: GitHub Actions check
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md).
+
 ## Privacy
 
 The extension does not collect or transmit user data. See [PRIVACY.md](PRIVACY.md).
