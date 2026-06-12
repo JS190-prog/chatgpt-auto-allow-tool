@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ChatGPT Auto Allow Tool</title>
+    <link rel="stylesheet" href="options.css">
+  </head>
+  <body>
+    <main>
+      <h1>ChatGPT Auto Allow Tool</h1>
+
+      <label class="row">
+        <input id="enabled" type="checkbox">
+        <span>자동 허용 사용</span>
+      </label>
+
+      <label>
+        클릭 지연 시간(ms)
+        <input id="clickDelayMs" type="number" min="0" step="50">
+      </label>
+
+      <label>
+        허용할 도구 이름
+        <input id="allowedTools" type="text" placeholder="비워두면 모든 도구 허용">
+      </label>
+
+      <label>
+        자동 클릭 제외 키워드
+        <input id="deniedKeywords" type="text" placeholder="비워두면 제외 없이 클릭">
+      </label>
+
+      <p id="status" role="status"></p>
+      <button id="save" type="button">저장</button>
+    </main>
+
+    <script src="options.js"></script>
+  </body>
+</html>
