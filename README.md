@@ -4,6 +4,8 @@ A small Chrome extension that automatically clicks Korean or English allow butto
 
 This is an unofficial tool and is not affiliated with OpenAI.
 
+[![Validate](https://github.com/OWNER/REPOSITORY/actions/workflows/validate.yml/badge.svg)](https://github.com/OWNER/REPOSITORY/actions/workflows/validate.yml)
+
 It was built for permission cards like:
 
 - `허용하기`
@@ -29,7 +31,7 @@ For safer use, open the extension options and set `Allowed tool names` so only s
 
 ## Options
 
-Open the extension details page, then click `Extension options`.
+Click the toolbar icon to quickly toggle automatic approval. For full settings, open the extension details page, then click `Extension options`.
 
 - `자동 허용 사용`: turn automatic clicking on or off
 - `클릭 지연 시간(ms)`: wait time before clicking the allow button
@@ -68,14 +70,26 @@ npm run check
 
 This validates JavaScript syntax and checks required manifest files.
 
+Create a release ZIP:
+
+```bash
+npm run package
+```
+
+The ZIP is written to `dist/`.
+
 ## Repository Contents
 
 - `manifest.json`: Chrome extension manifest
 - `content.js`: ChatGPT permission-card detection and auto-click logic
 - `options.html`, `options.css`, `options.js`: extension options page
+- `popup.html`, `popup.css`, `popup.js`: toolbar popup and quick toggle
 - `icons/`: extension icons
 - `scripts/validate-manifest.js`: lightweight manifest validation
+- `scripts/package-extension.js`: release ZIP packaging
 - `.github/workflows/validate.yml`: GitHub Actions check
+
+After creating your GitHub repository, replace `OWNER/REPOSITORY` in the README badge URL.
 
 ## Changelog
 

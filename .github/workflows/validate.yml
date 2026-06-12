@@ -16,3 +16,8 @@ jobs:
         with:
           node-version: 20
       - run: npm run check
+      - run: npm run package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: extension-zip
+          path: dist/*.zip

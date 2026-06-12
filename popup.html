@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ChatGPT Auto Allow Tool</title>
+    <link rel="stylesheet" href="popup.css">
+  </head>
+  <body>
+    <main>
+      <header>
+        <img src="icons/icon48.png" alt="" width="32" height="32">
+        <div>
+          <h1>Auto Allow</h1>
+          <p id="stateText">상태 확인 중</p>
+        </div>
+      </header>
+
+      <label class="toggle">
+        <span>자동 허용</span>
+        <input id="enabled" type="checkbox">
+      </label>
+
+      <dl>
+        <div>
+          <dt>지연</dt>
+          <dd id="delayText">-</dd>
+        </div>
+        <div>
+          <dt>허용 목록</dt>
+          <dd id="allowText">-</dd>
+        </div>
+      </dl>
+
+      <button id="options" type="button">옵션 열기</button>
+    </main>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

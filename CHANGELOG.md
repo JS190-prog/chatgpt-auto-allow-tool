@@ -7,6 +7,9 @@
 - Added extension options for enable state, click delay, allow-list tool names, and deny-list keywords.
 - Added repository metadata, validation, privacy, security, and license documents.
 - Added extension icons.
+- Added toolbar popup quick toggle.
+- Added release ZIP packaging.
+- Added troubleshooting and conduct docs.
 
 ## 0.1.0
 

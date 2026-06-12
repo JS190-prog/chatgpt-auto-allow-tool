@@ -24,6 +24,10 @@ if (manifest.options_page && !fs.existsSync(manifest.options_page)) {
   throw new Error(`Missing options page: ${manifest.options_page}`);
 }
 
+if (manifest.action?.default_popup && !fs.existsSync(manifest.action.default_popup)) {
+  throw new Error(`Missing action popup: ${manifest.action.default_popup}`);
+}
+
 for (const [size, file] of Object.entries(manifest.icons || {})) {
   if (!fs.existsSync(file)) {
     throw new Error(`Missing extension icon ${size}: ${file}`);
