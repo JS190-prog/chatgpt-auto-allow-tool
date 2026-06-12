@@ -1,31 +1,81 @@
 # ChatGPT Auto Allow Tool
 
-ChatGPT 웹페이지에 표시되는 도구 사용 허용 카드에서 `허용하기` 또는 `Allow` 버튼을 자동으로 누르는 Chrome 확장프로그램입니다.
+A small Chrome extension that automatically clicks Korean or English allow buttons on ChatGPT tool permission cards.
 
-## 설치
+This is an unofficial tool and is not affiliated with OpenAI.
 
-1. Chrome에서 `chrome://extensions`를 엽니다.
-2. 오른쪽 위 `개발자 모드`를 켭니다.
-3. `압축해제된 확장 프로그램을 로드`를 누릅니다.
-4. 이 폴더를 선택합니다: `C:\scratch\allowautoclick`
+It was built for permission cards like:
 
-## 설정
+- `허용하기`
+- `Allow`
+- `Approve`
+- `승인`
+- `사용 허용`
 
-확장프로그램 상세 페이지에서 `확장 프로그램 옵션`을 열 수 있습니다.
+## Important Safety Notice
 
-- `자동 허용 사용`: 자동 클릭 켜기/끄기
-- `클릭 지연 시간`: 버튼이 보인 뒤 클릭하기까지 기다릴 시간
-- `허용할 도구 이름`: 쉼표로 구분합니다. 비워두면 모든 도구 허용 카드에서 작동합니다.
-- `자동 클릭 제외 키워드`: 카드 내용에 이 키워드가 있으면 클릭하지 않습니다. 비워두면 제외 없이 클릭합니다.
+This extension can approve tool usage without another manual click. Use it only when you understand which tools ChatGPT may call.
 
-## 작동 방식
+For safer use, open the extension options and set `Allowed tool names` so only specific tools are auto-approved.
 
-0.2.0부터 기본 제외 키워드는 비워져 있습니다. 이전 버전은 `cancel`이라는 단어가 포함된 설명문까지 차단해서, "This will cancel..." 같은 안내가 있는 실제 허용 카드에서 작동하지 않을 수 있었습니다.
+## Install From Source
 
-버튼 클릭은 단순 `button.click()` 대신 포인터/마우스 이벤트를 함께 발생시키는 방식으로 처리합니다.
+1. Download or clone this repository.
+2. Open Chrome extensions: `chrome://extensions`
+3. Turn on `Developer mode`.
+4. Click `Load unpacked`.
+5. Select the repository folder.
+6. Refresh any open ChatGPT tab.
 
-## 제한
+## Options
 
-이 확장프로그램은 ChatGPT 웹페이지 DOM 안에 있는 버튼만 클릭할 수 있습니다. Chrome 자체 권한 팝업, 운영체제 보안 팝업, 확장프로그램 설치 확인 같은 브라우저 네이티브 UI는 클릭할 수 없습니다.
+Open the extension details page, then click `Extension options`.
 
-자동으로 권한을 허용하면 의도하지 않은 도구 실행까지 승인될 수 있습니다. 가능하면 `허용할 도구 이름`에 자주 쓰는 도구 이름만 넣어 사용하세요.
+- `자동 허용 사용`: turn automatic clicking on or off
+- `클릭 지연 시간(ms)`: wait time before clicking the allow button
+- `허용할 도구 이름`: comma-separated allow list; leave blank to allow every matching permission card
+- `자동 클릭 제외 키워드`: comma-separated deny list; leave blank to disable keyword blocking
+
+## How It Works
+
+The content script runs only on:
+
+- `https://chatgpt.com/*`
+- `https://chat.openai.com/*`
+
+It scans visible buttons and looks for a nearby ChatGPT permission card. When a matching allow button is found, it dispatches pointer and mouse events before calling `button.click()`.
+
+Version `0.2.0` changed the default deny keywords to blank. Earlier behavior could accidentally block real permission cards containing text such as `This will cancel...`.
+
+## Limitations
+
+This extension can click only buttons inside the webpage DOM. It cannot click:
+
+- Chrome native permission prompts
+- operating system dialogs
+- extension install confirmations
+- pages outside the declared ChatGPT host permissions
+
+ChatGPT UI changes may require updates to the matching logic.
+
+## Development
+
+Run the local checks:
+
+```bash
+npm run check
+```
+
+This validates JavaScript syntax and checks required manifest files.
+
+## Privacy
+
+The extension does not collect or transmit user data. See [PRIVACY.md](PRIVACY.md).
+
+## Security
+
+See [SECURITY.md](SECURITY.md).
+
+## License
+
+MIT. See [LICENSE](LICENSE).

@@ -1,1 +1,3 @@
 mcp-shell.log
+node_modules/
+*.zip
