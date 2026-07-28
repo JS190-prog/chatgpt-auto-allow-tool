@@ -77,3 +77,18 @@ button {
   font-weight: 700;
   cursor: pointer;
 }
+
+button + button {
+  margin-top: 8px;
+}
+
+button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+#refreshStatus {
+  min-height: 19px;
+  margin: 6px 0 8px;
+  overflow-wrap: anywhere;
+}

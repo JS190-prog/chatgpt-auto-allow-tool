@@ -19,6 +19,7 @@ const files = [
   "icons/icon48.png",
   "icons/icon128.png"
 ];
+const archivePaths = [...files.filter((file) => !file.startsWith("icons/")), "icons"];
 
 for (const file of files) {
   if (!fs.existsSync(file)) {
@@ -29,10 +30,16 @@ for (const file of files) {
 fs.mkdirSync(outDir, { recursive: true });
 
 if (fs.existsSync(outFile)) {
-  fs.rmSync(outFile);
+  throw new Error(`Output already exists; move it before packaging: ${outFile}`);
 }
 
-childProcess.execFileSync("git", ["archive", "--format=zip", `--output=${outFile}`, "HEAD", ...files], {
+const powershellPaths = archivePaths
+  .map((file) => `'${path.resolve(file).replaceAll("'", "''")}'`)
+  .join(",");
+const powershellOutput = path.resolve(outFile).replaceAll("'", "''");
+const command = `Compress-Archive -LiteralPath @(${powershellPaths}) -DestinationPath '${powershellOutput}' -CompressionLevel Optimal`;
+
+childProcess.execFileSync("powershell", ["-NoProfile", "-Command", command], {
   stdio: "inherit"
 });
 
