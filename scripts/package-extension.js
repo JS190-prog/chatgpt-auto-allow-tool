@@ -1,8 +1,10 @@
 const childProcess = require("child_process");
 const fs = require("fs");
 const path = require("path");
+const { validateCurrentVersion } = require("./validate-version");
 
 const manifest = JSON.parse(fs.readFileSync("manifest.json", "utf8"));
+validateCurrentVersion();
 const outDir = "dist";
 const outFile = path.join(outDir, `chatgpt-auto-allow-tool-${manifest.version}.zip`);
 

@@ -4,7 +4,7 @@
   "private": true,
   "description": "Chrome extension that automatically clicks Korean/English allow buttons on ChatGPT tool permission cards.",
   "scripts": {
-    "check": "node --check content.js && node --check options.js && node --check popup.js && node --check scripts/package-extension.js && node scripts/validate-manifest.js && node scripts/validate-plugin-refresh.js",
+    "check": "node --check content.js && node --check options.js && node --check popup.js && node --check scripts/package-extension.js && node --check scripts/validate-version.js && node scripts/validate-manifest.js && node scripts/validate-version-contract.js && node scripts/validate-plugin-refresh.js",
     "package": "node scripts/package-extension.js"
   },
   "keywords": [

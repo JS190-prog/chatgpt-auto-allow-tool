@@ -80,6 +80,8 @@ npm run package
 
 ZIP 파일은 `dist/` 폴더에 생성됩니다.
 
+`manifest.json`과 `package.json`의 버전은 항상 같아야 합니다. `release-version.json`은 이미 공개된 최저 허용 버전을 기록하며, 패키징은 이 값보다 낮은 버전을 자동으로 거부합니다. 새 버전을 공개한 뒤에만 `minimumPublishedVersion`을 그 버전으로 올립니다.
+
 ## 저장소 구성
 
 - `manifest.json`: Chrome 확장프로그램 매니페스트
@@ -88,6 +90,7 @@ ZIP 파일은 `dist/` 폴더에 생성됩니다.
 - `popup.html`, `popup.css`, `popup.js`: 툴바 팝업과 빠른 토글
 - `icons/`: 확장프로그램 아이콘
 - `scripts/validate-manifest.js`: 간단한 매니페스트 검증 스크립트
+- `scripts/validate-version.js`: 버전 일치 및 공개 버전 하향 방지 검사
 - `scripts/package-extension.js`: 릴리스 ZIP 패키징 스크립트
 - `.github/workflows/validate.yml`: GitHub Actions 검증 워크플로
 
