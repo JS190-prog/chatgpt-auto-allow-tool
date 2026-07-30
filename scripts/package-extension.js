@@ -40,8 +40,9 @@ const powershellPaths = archivePaths
   .join(",");
 const powershellOutput = path.resolve(outFile).replaceAll("'", "''");
 const command = `Compress-Archive -LiteralPath @(${powershellPaths}) -DestinationPath '${powershellOutput}' -CompressionLevel Optimal`;
+const powershell = process.platform === "win32" ? "powershell" : "pwsh";
 
-childProcess.execFileSync("powershell", ["-NoProfile", "-Command", command], {
+childProcess.execFileSync(powershell, ["-NoProfile", "-Command", command], {
   stdio: "inherit"
 });
 

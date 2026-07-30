@@ -1,4 +1,5 @@
 const assert = require("assert");
+const fs = require("fs");
 const {
   compareVersions,
   validateCurrentVersion,
@@ -17,5 +18,9 @@ assert.throws(
   /Version mismatch/
 );
 assert.strictEqual(validateCurrentVersion(), "0.2.4");
+assert.ok(
+  fs.readFileSync("scripts/package-extension.js", "utf8")
+    .includes('process.platform === "win32" ? "powershell" : "pwsh"')
+);
 
 console.log("Version downgrade checks OK.");
