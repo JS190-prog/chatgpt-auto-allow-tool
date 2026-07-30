@@ -369,6 +369,44 @@ async function returnToPluginList(target) {
   );
 }
 
+async function closePluginSettings() {
+  if (!getSettingsDialog()) {
+    return;
+  }
+
+  window.location.hash = "";
+
+  await waitForCondition(
+    () => !getSettingsDialog(),
+    10000,
+    "플러그인 설정 창을 닫지 못했습니다."
+  );
+}
+
+function showPluginRefreshNotice(message, isError = false) {
+  document.getElementById("chatgpt-auto-allow-refresh-notice")?.remove();
+  if (!document.body) {
+    return;
+  }
+
+  const notice = document.createElement("div");
+  notice.id = "chatgpt-auto-allow-refresh-notice";
+  notice.setAttribute("role", isError ? "alert" : "status");
+  notice.setAttribute("aria-live", isError ? "assertive" : "polite");
+  notice.style.cssText = `position:fixed;top:16px;right:16px;z-index:2147483647;display:flex;align-items:center;gap:12px;max-width:420px;padding:12px 14px;border-radius:10px;background:${isError ? "#991b1b" : "#166534"};color:#fff;font:600 14px/1.4 system-ui,sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.3)`;
+
+  const text = document.createElement("span");
+  text.textContent = message;
+  const dismiss = document.createElement("button");
+  dismiss.type = "button";
+  dismiss.setAttribute("aria-label", "완료 알림 닫기");
+  dismiss.textContent = "×";
+  dismiss.style.cssText = "border:0;background:transparent;color:inherit;font:700 20px/1 system-ui,sans-serif;cursor:pointer";
+  dismiss.addEventListener("click", () => notice.remove());
+  notice.append(text, dismiss);
+  document.body.appendChild(notice);
+}
+
 async function refreshCurrentPlugin(target) {
   let decision;
   try {
@@ -455,11 +493,16 @@ async function refreshConnectedPlugins() {
       await returnToPluginList(target);
     }
 
+    await closePluginSettings();
     pluginRefreshState.current = "";
     pluginRefreshState.status = "done";
+    showPluginRefreshNotice(
+      `플러그인 새로고침 완료 · 완료 ${pluginRefreshState.completed}/${pluginRefreshState.total} · 건너뜀 ${pluginRefreshState.skipped}`
+    );
   } catch (error) {
     pluginRefreshState.status = "error";
     pluginRefreshState.error = error instanceof Error ? error.message : String(error);
+    showPluginRefreshNotice(`플러그인 새로고침 중단 · ${pluginRefreshState.error}`, true);
   } finally {
     pluginRefreshPromise = null;
   }

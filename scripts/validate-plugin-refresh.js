@@ -60,6 +60,13 @@ assert.strictEqual(context.classifyPluginDetail(null, {}), "skip");
 assert.strictEqual(context.classifyPluginDetail(null, null), "loading");
 assert.strictEqual(listeners.length, 1);
 
+assert.strictEqual(source.includes("async function closePluginSettings()"), true);
+assert.strictEqual(source.includes("function showPluginRefreshNotice(message, isError = false)"), true);
+assert.strictEqual(source.split("async function closePluginSettings()", 2)[1].split("function showPluginRefreshNotice", 1)[0].includes('window.location.hash = "";'), true);
+const refreshWorkflow = source.split("async function refreshConnectedPlugins()", 2)[1].split("function clickButton", 1)[0];
+assert.ok(refreshWorkflow.indexOf("await closePluginSettings();") < refreshWorkflow.indexOf('pluginRefreshState.status = "done";'));
+assert.ok(refreshWorkflow.indexOf('pluginRefreshState.status = "done";') < refreshWorkflow.indexOf("showPluginRefreshNotice("));
+
 for (const fixedName of ["1. office", "2. hwp", "3. blender", "4. cad", "5. photoshop", "6. Local Code", "7. OpenCrab Ingest"]) {
   assert.strictEqual(source.includes(fixedName), false, `Fixed plugin name found: ${fixedName}`);
 }

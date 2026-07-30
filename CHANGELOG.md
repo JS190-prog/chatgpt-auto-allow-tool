@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.4
+
+- Closes the ChatGPT plugin settings dialog after the full refresh run finishes.
+- Shows a dismissible in-page completion or error notice with completed and skipped counts.
+
 ## 0.2.3
 
 - Treats plugin details without a refresh action as normal skips instead of stopping the full run.
