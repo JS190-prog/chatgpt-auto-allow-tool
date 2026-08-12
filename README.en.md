@@ -39,6 +39,15 @@ Click the toolbar icon to quickly toggle automatic approval. For full settings, 
 - `클릭 지연 시간(ms)`: wait time before clicking the allow button
 - `허용할 도구 이름`: comma-separated allow list; leave blank to allow every matching permission card
 - `자동 클릭 제외 키워드`: comma-separated deny list; leave blank to disable keyword blocking
+- `플러그인 자동 새로고침 주기(시간)`: how often the full plugin refresh runs by itself, in hours. Defaults to `0`, which means it only runs when you start it from the popup
+
+## Automatic Plugin Refresh
+
+ChatGPT only picks up a connector's new tool list after `새로 고침` is clicked on that plugin. This extension runs that whole sweep for you on an interval.
+
+An automatic run starts **only while the ChatGPT tab is in the background**, and stops the moment you switch back to it; the remaining plugins are picked up at the next idle window. The settings dialog never opens in front of you. Multiple ChatGPT tabs share the last-run timestamp, so the sweep runs once.
+
+Successful automatic runs stay silent. Only failures raise a notice. The manual run from the popup still shows its completion notice.
 
 ## How It Works
 

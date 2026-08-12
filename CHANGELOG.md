@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.0
+
+- Added the optional `플러그인 자동 새로고침 주기(시간)` setting, which runs the full plugin refresh on an interval. Defaults to `0`, so the popup stays the only trigger unless it is turned on.
+- Automatic runs only start while the ChatGPT tab is in the background, and stop as soon as the user looks at that tab again.
+
 ## 0.2.4
 
 - Closes the ChatGPT plugin settings dialog after the full refresh run finishes.

@@ -2,14 +2,16 @@ const DEFAULT_SETTINGS = {
   enabled: true,
   clickDelayMs: 300,
   allowedTools: "",
-  deniedKeywords: ""
+  deniedKeywords: "",
+  autoRefreshHours: 0
 };
 
 const fields = {
   enabled: document.querySelector("#enabled"),
   clickDelayMs: document.querySelector("#clickDelayMs"),
   allowedTools: document.querySelector("#allowedTools"),
-  deniedKeywords: document.querySelector("#deniedKeywords")
+  deniedKeywords: document.querySelector("#deniedKeywords"),
+  autoRefreshHours: document.querySelector("#autoRefreshHours")
 };
 
 const status = document.querySelector("#status");
@@ -21,6 +23,7 @@ async function loadSettings() {
   fields.clickDelayMs.value = settings.clickDelayMs;
   fields.allowedTools.value = settings.allowedTools;
   fields.deniedKeywords.value = settings.deniedKeywords;
+  fields.autoRefreshHours.value = settings.autoRefreshHours;
 }
 
 async function saveSettings() {
@@ -28,7 +31,8 @@ async function saveSettings() {
     enabled: fields.enabled.checked,
     clickDelayMs: Math.max(0, Number(fields.clickDelayMs.value) || 0),
     allowedTools: fields.allowedTools.value,
-    deniedKeywords: fields.deniedKeywords.value
+    deniedKeywords: fields.deniedKeywords.value,
+    autoRefreshHours: Math.max(0, Number(fields.autoRefreshHours.value) || 0)
   });
   status.textContent = "저장되었습니다.";
   window.setTimeout(() => {

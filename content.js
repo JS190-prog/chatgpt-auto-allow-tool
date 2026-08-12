@@ -2,7 +2,8 @@ const DEFAULT_SETTINGS = {
   enabled: true,
   clickDelayMs: 300,
   allowedTools: "",
-  deniedKeywords: ""
+  deniedKeywords: "",
+  autoRefreshHours: 0
 };
 
 const OLD_DENY_DEFAULT = "delete,remove,\uc0ad\uc81c,\uc81c\uac70,\ucde8\uc18c,cancel";
@@ -43,6 +44,9 @@ const pluginRefreshState = {
   error: ""
 };
 let pluginRefreshPromise = null;
+const AUTO_REFRESH_LAST_RUN_KEY = "autoPluginRefreshAt";
+const HOUR_MS = 3600000;
+let autoRefreshLastRunAt = 0;
 
 function normalize(text) {
   return (text || "").replace(/\s+/g, " ").trim().toLowerCase();
@@ -471,7 +475,7 @@ function snapshotPluginRefreshState() {
   return { ...pluginRefreshState };
 }
 
-async function refreshConnectedPlugins() {
+async function refreshConnectedPlugins({ auto = false, previousRunAt = 0 } = {}) {
   Object.assign(pluginRefreshState, {
     status: "running",
     total: 0,
@@ -487,6 +491,18 @@ async function refreshConnectedPlugins() {
     pluginRefreshState.total = targets.length;
 
     for (const target of targets) {
+      // An automatic run only ever happens in a background tab. The moment the
+      // user looks at it, stop rather than flipping the settings dialog in
+      // their face, and give the claimed slot back so the next idle window
+      // picks the remaining plugins up.
+      if (auto && !document.hidden) {
+        await closePluginSettings();
+        await releaseAutoRefreshSlot(previousRunAt);
+        pluginRefreshState.current = "";
+        pluginRefreshState.status = "aborted";
+        return;
+      }
+
       pluginRefreshState.current = target.name;
       await openPluginDetail(target);
       await refreshCurrentPlugin(target);
@@ -496,9 +512,11 @@ async function refreshConnectedPlugins() {
     await closePluginSettings();
     pluginRefreshState.current = "";
     pluginRefreshState.status = "done";
-    showPluginRefreshNotice(
-      `플러그인 새로고침 완료 · 완료 ${pluginRefreshState.completed}/${pluginRefreshState.total} · 건너뜀 ${pluginRefreshState.skipped}`
-    );
+    if (!auto) {
+      showPluginRefreshNotice(
+        `플러그인 새로고침 완료 · 완료 ${pluginRefreshState.completed}/${pluginRefreshState.total} · 건너뜀 ${pluginRefreshState.skipped}`
+      );
+    }
   } catch (error) {
     pluginRefreshState.status = "error";
     pluginRefreshState.error = error instanceof Error ? error.message : String(error);
@@ -506,6 +524,50 @@ async function refreshConnectedPlugins() {
   } finally {
     pluginRefreshPromise = null;
   }
+}
+
+function shouldAutoRefresh({ enabled, autoRefreshHours, running, hidden, lastRunAt, now }) {
+  const hours = Number(autoRefreshHours);
+  if (!enabled || running || !hidden || !(hours > 0)) {
+    return false;
+  }
+  return now - (Number(lastRunAt) || 0) >= hours * HOUR_MS;
+}
+
+function autoRefreshDecisionInput(lastRunAt) {
+  return {
+    enabled: settings.enabled,
+    autoRefreshHours: settings.autoRefreshHours,
+    running: Boolean(pluginRefreshPromise),
+    hidden: document.hidden,
+    lastRunAt,
+    now: Date.now()
+  };
+}
+
+async function releaseAutoRefreshSlot(previousRunAt) {
+  autoRefreshLastRunAt = previousRunAt;
+  await chrome.storage.local.set({ [AUTO_REFRESH_LAST_RUN_KEY]: previousRunAt });
+}
+
+async function maybeAutoRefreshPlugins() {
+  if (!shouldAutoRefresh(autoRefreshDecisionInput(autoRefreshLastRunAt))) {
+    return;
+  }
+
+  // Every ChatGPT tab runs this same interval, so the in-memory value is only a
+  // cheap gate. The stored timestamp is the authoritative claim: re-read it,
+  // decide again, then write ours before starting any UI work.
+  const stored = await chrome.storage.local.get({ [AUTO_REFRESH_LAST_RUN_KEY]: 0 });
+  const previousRunAt = Number(stored[AUTO_REFRESH_LAST_RUN_KEY]) || 0;
+  autoRefreshLastRunAt = previousRunAt;
+  if (!shouldAutoRefresh(autoRefreshDecisionInput(previousRunAt))) {
+    return;
+  }
+
+  autoRefreshLastRunAt = Date.now();
+  await chrome.storage.local.set({ [AUTO_REFRESH_LAST_RUN_KEY]: autoRefreshLastRunAt });
+  pluginRefreshPromise = refreshConnectedPlugins({ auto: true, previousRunAt });
 }
 
 function clickButton(button) {
@@ -541,9 +603,19 @@ async function loadSettings() {
     settings.deniedKeywords = "";
     await chrome.storage.sync.set({ deniedKeywords: "" });
   }
+
+  const localState = await chrome.storage.local.get({ [AUTO_REFRESH_LAST_RUN_KEY]: 0 });
+  autoRefreshLastRunAt = Number(localState[AUTO_REFRESH_LAST_RUN_KEY]) || 0;
 }
 
 chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === "local") {
+    // Another tab claimed or released the automatic run.
+    if (AUTO_REFRESH_LAST_RUN_KEY in changes) {
+      autoRefreshLastRunAt = Number(changes[AUTO_REFRESH_LAST_RUN_KEY].newValue) || 0;
+    }
+    return;
+  }
   if (area !== "sync") {
     return;
   }
@@ -571,7 +643,15 @@ const observer = new MutationObserver(() => scan());
 
 loadSettings().then(() => {
   scan();
-  window.setInterval(scan, 1000);
+  // ponytail: the automatic run rides the existing scan interval, so it needs an
+  // open ChatGPT tab and can stall if Chrome freezes that tab mid-sweep. It
+  // resumes on unfreeze and the abort path closes the dialog. Move to a service
+  // worker + chrome.alarms only if that stall shows up in practice.
+  window.setInterval(() => {
+    scan();
+    // Transient storage errors just mean the next tick retries.
+    maybeAutoRefreshPlugins().catch(() => {});
+  }, 1000);
   observer.observe(document.documentElement, {
     childList: true,
     subtree: true,
