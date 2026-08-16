@@ -17,7 +17,7 @@ assert.throws(
   () => validateVersionContract("0.2.3", "0.2.2", "0.2.3"),
   /Version mismatch/
 );
-assert.strictEqual(validateCurrentVersion(), "0.3.0");
+assert.strictEqual(validateCurrentVersion(), "0.3.1");
 assert.ok(
   fs.readFileSync("scripts/package-extension.js", "utf8")
     .includes('process.platform === "win32" ? "powershell" : "pwsh"')

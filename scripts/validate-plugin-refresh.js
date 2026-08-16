@@ -51,6 +51,16 @@ assert.deepStrictEqual(
   [...context.buildPluginEntryKeys(["Same", "Same", "Different"])],
   ["same#1", "same#2", "different#1"]
 );
+assert.strictEqual(
+  context.getPluginEntryName({ innerText: "Plugin Twelve\n모두 허용" }),
+  "Plugin Twelve",
+  "mutable secondary row text must not become part of plugin identity"
+);
+assert.strictEqual(
+  context.getPluginEntryName({ textContent: "  Plugin Twelve  \n연결됨" }),
+  "Plugin Twelve",
+  "textContent fallback must preserve the same stable first-line identity"
+);
 assert.strictEqual(context.isControlDisabled({ disabled: true }), true);
 assert.strictEqual(
   context.isControlDisabled({
@@ -66,6 +76,10 @@ assert.strictEqual(context.classifyPluginDetail(null, null), "loading");
 assert.strictEqual(listeners.length, 1);
 
 assert.strictEqual(source.includes("async function closePluginSettings()"), true);
+assert.strictEqual(source.includes("const names = buttons.map((button) => getPluginEntryName(button));"), true);
+assert.strictEqual(source.includes("const entry = await waitForPluginEntry(target);"), true);
+assert.strictEqual(source.includes("timeoutMs = 12000"), true);
+assert.strictEqual(source.includes("목록에서 다시 찾지 못했습니다."), false);
 assert.strictEqual(source.includes("function showPluginRefreshNotice(message, isError = false)"), true);
 assert.strictEqual(source.split("async function closePluginSettings()", 2)[1].split("function showPluginRefreshNotice", 1)[0].includes('window.location.hash = "";'), true);
 const refreshWorkflow = source

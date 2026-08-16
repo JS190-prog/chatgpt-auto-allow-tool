@@ -212,6 +212,15 @@ function buildPluginEntryKeys(names) {
   });
 }
 
+function getPluginEntryName(button) {
+  const rawText = button?.innerText || button?.textContent || "";
+  const firstLine = String(rawText)
+    .split(/\r?\n/)
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .find(Boolean);
+  return firstLine || String(rawText).replace(/\s+/g, " ").trim();
+}
+
 function getSettingsDialog() {
   return [...document.querySelectorAll("[role='dialog']")].find(isVisible) || null;
 }
@@ -237,7 +246,10 @@ function getInstalledPluginEntries() {
       (!browsePlugins || (!button.contains(browsePlugins) && comesBefore(button, browsePlugins)))
     );
   });
-  const names = buttons.map((button) => button.innerText || button.textContent || "");
+  // The row can contain mutable secondary text such as a permission mode
+  // (for example, `모두 허용`).  Keep only the stable first line as the
+  // plugin identity so a React re-render does not make a queued target vanish.
+  const names = buttons.map((button) => getPluginEntryName(button));
   const keys = buildPluginEntryKeys(names);
 
   return buttons.map((button, index) => ({
@@ -337,11 +349,23 @@ async function openPluginSettings() {
   );
 }
 
+function findPluginEntry(target) {
+  return getInstalledPluginEntries().find(({ key }) => key === target.key) || null;
+}
+
+async function waitForPluginEntry(target, timeoutMs = 12000) {
+  return waitForCondition(
+    () => findPluginEntry(target),
+    timeoutMs,
+    `${target.name}: 플러그인 목록 복구 대기 시간이 초과됐습니다.`
+  );
+}
+
 async function openPluginDetail(target) {
-  const entry = getInstalledPluginEntries().find(({ key }) => key === target.key);
-  if (!entry) {
-    throw new Error(`${target.name}: 목록에서 다시 찾지 못했습니다.`);
-  }
+  // Returning from a refreshed detail view can briefly leave the React list in
+  // a partially rendered state.  The old code failed immediately in that
+  // window, which is why running the sweep a second time usually worked.
+  const entry = await waitForPluginEntry(target);
 
   clickOnceLikeUser(entry.button);
   await waitForCondition(

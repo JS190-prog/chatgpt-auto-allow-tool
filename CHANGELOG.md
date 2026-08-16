@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.1
+
+- Stabilized installed-plugin identity across permission/status re-renders so queued refresh targets do not disappear between list and detail views.
+- Waits for a target plugin row to reappear after returning from a detail page instead of failing immediately on a partially rendered React list.
+
 ## 0.3.0
 
 - Added the optional `플러그인 자동 새로고침 주기(시간)` setting, which runs the full plugin refresh on an interval. Defaults to `0`, so the popup stays the only trigger unless it is turned on.
