@@ -16,8 +16,8 @@ function harness({
   const requests = [];
   const events = [];
   class Element extends EventTarget {
-    constructor(text) { super(); this.innerText = text; this.disabled = false; }
-    getBoundingClientRect() { return { left: 0, top: 0, width: 100, height: 30 }; }
+    constructor(text) { super(); this.innerText = text; this.disabled = false; this.isConnected = true; }
+    getBoundingClientRect() { return { left: 0, top: 0, width: this.isConnected ? 100 : 0, height: this.isConnected ? 30 : 0 }; }
     getAttribute() { return null; }
     scrollIntoView() {}
     focus() {}
@@ -27,6 +27,7 @@ function harness({
   }
   const button = new Element(label);
   button.parentElement = new Element(cardText);
+  let activeButton = button;
   const dropdown = splitButton ? new Element("더 보기") : null;
   if (dropdown) dropdown.parentElement = button.parentElement;
   const menuOpens = [];
@@ -34,7 +35,7 @@ function harness({
   const ctx = {
     Element, MouseEvent: Event, PointerEvent: Event, console,
     MutationObserver: class { observe() {} disconnect() {} },
-    document: { documentElement: {}, querySelectorAll: () => dropdown ? [button, dropdown] : [button] },
+    document: { documentElement: {}, querySelectorAll: () => [activeButton, dropdown].filter(Boolean) },
     window: {
       setTimeout: (fn) => { timers.push(fn); return timers.length; },
       clearTimeout() {}, setInterval() {},
@@ -52,12 +53,24 @@ function harness({
   vm.createContext(ctx);
   vm.runInContext(source, ctx);
   vm.runInContext(`settings = ${JSON.stringify({ enabled, allowedTools, deniedKeywords, clickDelayMs: 300 })}`, ctx);
-  button.addEventListener("click", () => {
+  function onApprovalClick() {
     // Model the owning boundary: each activation submits one approval request.
     requests.push("approval-post");
     ctx.scan(); // Rendering triggered synchronously by the click must not queue another.
-  });
-  return { ctx, button, requests, events, menuOpens, flush: () => { while (timers.length) timers.shift()(); } };
+  }
+  button.addEventListener("click", onApprovalClick);
+  return {
+    ctx, button, requests, events, menuOpens,
+    replaceButton: () => {
+      activeButton.isConnected = false;
+      activeButton = new Element(label);
+      activeButton.parentElement = button.parentElement;
+      activeButton.addEventListener("click", onApprovalClick);
+      return activeButton;
+    },
+    removeButton: () => { activeButton.isConnected = false; activeButton = null; },
+    flush: () => { while (timers.length) timers.shift()(); }
+  };
 }
 
 let checks = 0;
@@ -79,6 +92,35 @@ for (const label of ["한 번만 허용", "한 번만 허용 ↵"]) {
   assert.equal(h.requests.length, 1, `${label}: split button must submit exactly one approval`);
   assert.equal(h.events.filter((event) => event === "click").length, 1);
   assert.equal(h.menuOpens.length, 0, "the dropdown must remain closed");
+  checks += 1;
+}
+{
+  const h = harness({
+    label: "한 번만 허용 ⏎",
+    allowedTools: "opencrab",
+    cardText: "3. opencrab ChatGPT가 3. opencrab을(를) 사용하도록 허용할까요? 거부 한 번만 허용",
+    splitButton: true
+  });
+  h.ctx.scan(); h.flush();
+  assert.equal(h.requests.length, 1, "the observed MCP approval card must activate once");
+  assert.equal(h.menuOpens.length, 0, "the observed split-button menu must remain closed");
+  checks += 1;
+}
+{
+  const h = harness({ label: "한 번만 허용 ⏎", splitButton: true });
+  h.ctx.scan();
+  h.replaceButton();
+  h.flush(); h.ctx.scan(); h.flush();
+  assert.equal(h.requests.length, 1, "a replaced approval button must still activate once");
+  assert.equal(h.menuOpens.length, 0, "the replacement must not activate the options menu");
+  checks += 1;
+}
+{
+  const h = harness({ label: "한 번만 허용 ⏎" });
+  h.ctx.scan();
+  h.removeButton();
+  h.flush();
+  assert.equal(h.requests.length, 0, "a disappeared approval must not activate another control");
   checks += 1;
 }
 for (const options of [

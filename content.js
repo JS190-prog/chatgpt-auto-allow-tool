@@ -438,7 +438,7 @@ function scanAutoContinue() {
 }
 
 function isAllowButton(button) {
-  if (button.disabled || clickedButtons.has(button) || !isVisible(button)) {
+  if (button.isConnected === false || button.disabled || clickedButtons.has(button) || !isVisible(button)) {
     return false;
   }
 
@@ -1216,21 +1216,23 @@ function clickButton(button) {
 
   pendingClick = window.setTimeout(() => {
     pendingClick = null;
-    if (!shouldClick(button)) {
+    const currentButton = shouldClick(button) ? button : findEligibleAllowButton();
+    if (!currentButton) {
       return;
     }
-    clickedButtons.add(button);
-    clickOnceLikeUser(button);
+    clickedButtons.add(currentButton);
+    clickOnceLikeUser(currentButton);
   }, Number(settings.clickDelayMs) || DEFAULT_SETTINGS.clickDelayMs);
 }
 
+function findEligibleAllowButton() {
+  return [...document.querySelectorAll("button, [role='button']")].find(shouldClick) || null;
+}
+
 function scan() {
-  const buttons = document.querySelectorAll("button, [role='button']");
-  for (const button of buttons) {
-    if (shouldClick(button)) {
-      clickButton(button);
-      break;
-    }
+  const button = findEligibleAllowButton();
+  if (button) {
+    clickButton(button);
   }
   scanAutoContinue();
 }

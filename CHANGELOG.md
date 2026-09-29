@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.9
+
+- Rechecks the current MCP approval button after the click delay, so a button replaced while ChatGPT renders can still receive one click. A disappeared approval is left alone.
+- Added a regression for the observed `한 번만 허용` split-button card and for button replacement during the delay.
+
 ## 0.5.8
 
 - Clarified that `한 번만 허용` refers to an MCP tool-call approval. Click behavior is unchanged from 0.5.7.
