@@ -3,7 +3,7 @@
 ## 0.5.7
 
 - Recognized any direct app-detail route below ChatGPT plugin settings, including new route prefixes used by skills-only apps. These loaded details are skipped without stopping the refresh sweep when no refresh action exists.
-- Added recognition for the Pro permission button labeled `한 번만 허용`, including the Enter-key hint, while leaving its adjacent options menu untouched.
+- Added recognition for the MCP tool-call approval button labeled `한 번만 허용`, including the Enter-key hint, while leaving its adjacent options menu untouched.
 
 ## 0.5.6
 
