@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.8
+
+- Clarified that `한 번만 허용` refers to an MCP tool-call approval. Click behavior is unchanged from 0.5.7.
+
 ## 0.5.7
 
 - Recognized any direct app-detail route below ChatGPT plugin settings, including new route prefixes used by skills-only apps. These loaded details are skipped without stopping the refresh sweep when no refresh action exists.

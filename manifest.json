@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "ChatGPT Auto Allow Tool",
   "description": "Automatically allows ChatGPT tools and optionally continues completed responses.",
-  "version": "0.5.7",
+  "version": "0.5.8",
   "permissions": ["storage"],
   "host_permissions": [
     "https://chatgpt.com/*",
