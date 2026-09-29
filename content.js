@@ -3,11 +3,17 @@ const DEFAULT_SETTINGS = {
   clickDelayMs: 300,
   allowedTools: "",
   deniedKeywords: "",
-  autoRefreshHours: 0
+  autoRefreshHours: 0,
+  autoContinueEnabled: false,
+  autoContinuePrompt: "이어서 진행",
+  autoContinueMaxTurns: 1
 };
 
 const OLD_DENY_DEFAULT = "delete,remove,\uc0ad\uc81c,\uc81c\uac70,\ucde8\uc18c,cancel";
+const AUTO_CONTINUE_DEFAULT_MIGRATION_KEY = "autoContinueDefaultOffApplied";
+const ALLOW_ONCE_TEXT_PATTERN = /\ud55c\s*\ubc88\ub9cc\s*\ud5c8\uc6a9/i;
 const ALLOW_TEXT_PATTERNS = [
+  ALLOW_ONCE_TEXT_PATTERN,
   /\ud5c8\uc6a9\ud558\uae30/i,
   /\uc0ac\uc6a9\s*\ud5c8\uc6a9/i,
   /\uc2b9\uc778/i,
@@ -25,28 +31,63 @@ const PERMISSION_TEXT_PATTERNS = [
 ];
 
 let settings = { ...DEFAULT_SETTINGS };
+let autoContinueTabOverride = null;
 let pendingClick = null;
 const clickedButtons = new WeakSet();
-const REFRESH_BUTTON_TEXTS = new Set(["새로 고침", "refresh"]);
+const PLUGIN_SETTINGS_PATH = "/settings/plugins-settings";
+const REFRESH_BUTTON_TEXTS = new Set([
+  "새로 고침",
+  "도구 새로 고침",
+  "refresh",
+  "refresh tools"
+]);
 const BACK_BUTTON_TEXTS = new Set(["이전", "back"]);
+const PLUGIN_BREADCRUMB_TEXTS = new Set(["플러그인", "plugins"]);
+const PROFILE_MENU_TEXTS = new Set(["프로필 메뉴 열기", "open profile menu"]);
+const SETTINGS_MENU_ITEM_TEXTS = new Set(["설정", "settings"]);
+const PLUGIN_SETTINGS_NAV_TEXTS = new Set(["플러그인", "plugins"]);
+const APP_MANAGEMENT_TEXTS = new Set(["앱 관리", "app management"]);
+const CONNECTED_ACCOUNT_TEXTS = new Set(["연결된 계정", "connected accounts"]);
+const DEV_MODE_VERSION_TEXTS = new Set(["dev mode"]);
 const INSTALLED_DESCRIPTION_TEXTS = new Set([
   "설치한 플러그인을 관리합니다",
-  "manage your installed plugins"
+  "manage your installed plugins",
+  "플러그인, 연결된 계정 및 권한을 관리합니다",
+  "manage plugins, connected accounts and permissions"
 ]);
-const BROWSE_PLUGIN_TEXTS = new Set(["플러그인 둘러보기", "browse plugins"]);
+const BROWSE_PLUGIN_TEXTS = new Set([
+  "플러그인 둘러보기",
+  "browse plugins",
+  "디렉터리 둘러보기",
+  "browse directory"
+]);
 const DETAIL_INFO_TEXTS = new Set(["정보", "information"]);
+const DETAIL_SKILLS_TEXTS = new Set(["스킬", "skills"]);
 const pluginRefreshState = {
   status: "idle",
   total: 0,
   completed: 0,
   skipped: 0,
   current: "",
+  currentStartedAt: 0,
   error: ""
 };
 let pluginRefreshPromise = null;
 const AUTO_REFRESH_LAST_RUN_KEY = "autoPluginRefreshAt";
 const HOUR_MS = 3600000;
+const REFRESH_COMPLETION_TIMEOUT_MS = 180000;
 let autoRefreshLastRunAt = 0;
+const AUTO_CONTINUE_DELAY_MS = 1000;
+const AUTO_CONTINUE_MAX_LIMIT = 100;
+const handledAssistantMessages = new WeakSet();
+const autoContinueState = {
+  ready: false,
+  observedGeneration: false,
+  awaitingAutoResponse: false,
+  sentCount: 0,
+  timer: null,
+  sending: false
+};
 
 function normalize(text) {
   return (text || "").replace(/\s+/g, " ").trim().toLowerCase();
@@ -84,6 +125,318 @@ function isVisible(element) {
   );
 }
 
+function getAutoContinueDefaultMigration(stored) {
+  if (stored[AUTO_CONTINUE_DEFAULT_MIGRATION_KEY]) {
+    return null;
+  }
+
+  const migration = {
+    [AUTO_CONTINUE_DEFAULT_MIGRATION_KEY]: true
+  };
+  if (stored.autoContinueEnabled !== DEFAULT_SETTINGS.autoContinueEnabled) {
+    migration.autoContinueEnabled = DEFAULT_SETTINGS.autoContinueEnabled;
+  }
+  return migration;
+}
+
+function normalizeAutoContinueMaxTurns(value) {
+  const parsed = Math.trunc(Number(value));
+  if (!Number.isFinite(parsed)) {
+    return DEFAULT_SETTINGS.autoContinueMaxTurns;
+  }
+  return Math.min(AUTO_CONTINUE_MAX_LIMIT, Math.max(1, parsed));
+}
+
+function resolveAutoContinueEnabled(globalEnabled, tabOverride) {
+  return typeof tabOverride === "boolean" ? tabOverride : Boolean(globalEnabled);
+}
+
+function resolveAutoContinueOverride(globalEnabled, requestedEnabled) {
+  const requested = Boolean(requestedEnabled);
+  return requested === Boolean(globalEnabled) ? null : requested;
+}
+
+function isAutoContinueEnabled() {
+  return resolveAutoContinueEnabled(
+    settings.autoContinueEnabled,
+    autoContinueTabOverride
+  );
+}
+
+function snapshotAutoContinueTabState() {
+  return {
+    globalEnabled: Boolean(settings.autoContinueEnabled),
+    tabOverride: autoContinueTabOverride,
+    effectiveEnabled: isAutoContinueEnabled()
+  };
+}
+
+async function loadAutoContinueTabOverride() {
+  if (!chrome.runtime?.sendMessage) {
+    autoContinueTabOverride = null;
+    return;
+  }
+
+  const state = await chrome.runtime.sendMessage({
+    type: "get-tab-auto-continue-override"
+  });
+  autoContinueTabOverride = typeof state?.override === "boolean"
+    ? state.override
+    : null;
+}
+
+async function setAutoContinueForThisTab(requestedEnabled) {
+  const previousEffective = isAutoContinueEnabled();
+  const nextOverride = resolveAutoContinueOverride(
+    settings.autoContinueEnabled,
+    requestedEnabled
+  );
+
+  const result = await chrome.runtime.sendMessage({
+    type: "set-tab-auto-continue-override",
+    override: nextOverride
+  });
+  if (!result?.ok) {
+    throw new Error(result?.error || "탭별 설정을 저장하지 못했습니다.");
+  }
+
+  autoContinueTabOverride = nextOverride;
+  const nextEffective = isAutoContinueEnabled();
+  if (previousEffective && !nextEffective) {
+    resetAutoContinueTracking();
+  }
+  scan();
+  return snapshotAutoContinueTabState();
+}
+
+function getAssistantMessages() {
+  return [...document.querySelectorAll('[data-message-author-role="assistant"]')];
+}
+
+function getLatestAssistantMessage() {
+  return getAssistantMessages().at(-1) || null;
+}
+
+function isResponseGenerating() {
+  const stopButtons = document.querySelectorAll(
+    'button[data-testid="stop-button"], button[aria-label*="응답 중지"], button[aria-label*="Stop response"]'
+  );
+  return [...stopButtons].some(isVisible);
+}
+
+function findPromptComposer() {
+  return (
+    document.querySelector("#prompt-textarea") ||
+    document.querySelector('form [contenteditable="true"]') ||
+    document.querySelector('form textarea[name="prompt-textarea"]')
+  );
+}
+
+function getComposerText(composer) {
+  if (!composer) {
+    return "";
+  }
+  return String("value" in composer ? composer.value : composer.textContent || "").trim();
+}
+
+function setComposerText(composer, text) {
+  composer.focus();
+
+  if (composer instanceof HTMLTextAreaElement) {
+    const valueSetter = Object.getOwnPropertyDescriptor(
+      HTMLTextAreaElement.prototype,
+      "value"
+    )?.set;
+    valueSetter?.call(composer, text);
+  } else {
+    composer.textContent = text;
+  }
+
+  composer.dispatchEvent(
+    new InputEvent("input", {
+      bubbles: true,
+      composed: true,
+      data: text,
+      inputType: "insertText"
+    })
+  );
+}
+
+function findSendButton(composer) {
+  const form = composer?.closest?.("form") || document;
+  return [...form.querySelectorAll(
+    'button[data-testid="send-button"], button[aria-label*="프롬프트 보내기"], button[aria-label*="Send prompt"]'
+  )].find((button) => isVisible(button) && !isControlDisabled(button)) || null;
+}
+
+function shouldScheduleAutoContinue({
+  enabled,
+  autoContinueEnabled,
+  observedGeneration,
+  pending,
+  sending,
+  sentCount,
+  maxTurns,
+  hasMessage,
+  handled
+}) {
+  return Boolean(
+    enabled &&
+      autoContinueEnabled &&
+      observedGeneration &&
+      !pending &&
+      !sending &&
+      sentCount < normalizeAutoContinueMaxTurns(maxTurns) &&
+      hasMessage &&
+      !handled
+  );
+}
+
+function cancelPendingAutoContinue() {
+  if (autoContinueState.timer) {
+    window.clearTimeout(autoContinueState.timer);
+  }
+  autoContinueState.timer = null;
+}
+
+function markExistingAssistantMessagesHandled({ keepLatest = false } = {}) {
+  const messages = getAssistantMessages();
+  const lastIndex = messages.length - 1;
+  messages.forEach((message, index) => {
+    if (!keepLatest || index !== lastIndex) {
+      handledAssistantMessages.add(message);
+    }
+  });
+}
+
+function resetAutoContinueTracking() {
+  cancelPendingAutoContinue();
+  markExistingAssistantMessagesHandled();
+  Object.assign(autoContinueState, {
+    observedGeneration: false,
+    awaitingAutoResponse: false,
+    sentCount: 0,
+    sending: false
+  });
+}
+
+function initializeAutoContinue() {
+  const generating = isResponseGenerating();
+  markExistingAssistantMessagesHandled({ keepLatest: generating });
+  autoContinueState.observedGeneration = generating;
+  autoContinueState.ready = true;
+}
+
+async function submitAutoContinuePrompt(message) {
+  autoContinueState.timer = null;
+
+  if (
+    !settings.enabled ||
+    !isAutoContinueEnabled() ||
+    isResponseGenerating() ||
+    handledAssistantMessages.has(message)
+  ) {
+    return;
+  }
+
+  handledAssistantMessages.add(message);
+  const composer = findPromptComposer();
+  const prompt = String(settings.autoContinuePrompt || "").trim();
+  if (!composer || !prompt || getComposerText(composer)) {
+    return;
+  }
+
+  autoContinueState.sending = true;
+  try {
+    setComposerText(composer, prompt);
+    const sendButton = await waitForCondition(
+      () => findSendButton(composer),
+      5000,
+      "자동 이어서 진행 전송 버튼을 찾지 못했습니다."
+    );
+
+    if (!settings.enabled || !isAutoContinueEnabled() || isResponseGenerating()) {
+      return;
+    }
+
+    autoContinueState.awaitingAutoResponse = true;
+    try {
+      clickOnceLikeUser(sendButton);
+      await waitForCondition(
+        () => isResponseGenerating() || !getComposerText(composer),
+        5000,
+        "자동 이어서 진행 전송을 확인하지 못했습니다."
+      );
+      autoContinueState.sentCount += 1;
+      showAutoContinueNotice(
+        `자동 이어서 진행 · ${autoContinueState.sentCount}/${normalizeAutoContinueMaxTurns(settings.autoContinueMaxTurns)}회 전송`
+      );
+    } catch (error) {
+      autoContinueState.awaitingAutoResponse = false;
+      throw error;
+    }
+  } finally {
+    autoContinueState.sending = false;
+  }
+}
+
+function scanAutoContinue() {
+  if (!autoContinueState.ready) {
+    return;
+  }
+
+  if (!settings.enabled || !isAutoContinueEnabled() || pluginRefreshPromise) {
+    cancelPendingAutoContinue();
+    return;
+  }
+
+  if (isResponseGenerating()) {
+    cancelPendingAutoContinue();
+    if (!autoContinueState.observedGeneration && !autoContinueState.awaitingAutoResponse) {
+      autoContinueState.sentCount = 0;
+    }
+    autoContinueState.observedGeneration = true;
+    return;
+  }
+
+  const latestMessage = getLatestAssistantMessage();
+  const shouldSchedule = shouldScheduleAutoContinue({
+    enabled: settings.enabled,
+    autoContinueEnabled: isAutoContinueEnabled(),
+    observedGeneration: autoContinueState.observedGeneration,
+    pending: Boolean(autoContinueState.timer),
+    sending: autoContinueState.sending,
+    sentCount: autoContinueState.sentCount,
+    maxTurns: settings.autoContinueMaxTurns,
+    hasMessage: Boolean(latestMessage),
+    handled: latestMessage ? handledAssistantMessages.has(latestMessage) : false
+  });
+
+  if (!autoContinueState.observedGeneration) {
+    return;
+  }
+
+  autoContinueState.observedGeneration = false;
+  autoContinueState.awaitingAutoResponse = false;
+
+  if (!shouldSchedule) {
+    if (latestMessage) {
+      handledAssistantMessages.add(latestMessage);
+    }
+    const maxTurns = normalizeAutoContinueMaxTurns(settings.autoContinueMaxTurns);
+    if (autoContinueState.sentCount >= maxTurns) {
+      showAutoContinueNotice(
+        `자동 이어서 진행 완료 · ${autoContinueState.sentCount}/${maxTurns}회`
+      );
+    }
+    return;
+  }
+
+  autoContinueState.timer = window.setTimeout(() => {
+    submitAutoContinuePrompt(latestMessage).catch(() => {});
+  }, AUTO_CONTINUE_DELAY_MS);
+}
+
 function isAllowButton(button) {
   if (button.disabled || clickedButtons.has(button) || !isVisible(button)) {
     return false;
@@ -101,7 +454,8 @@ function looksLikePermissionCard(element) {
 
   const hasPermissionText = PERMISSION_TEXT_PATTERNS.some((pattern) => pattern.test(text));
   const hasRejectButton = /\uac70\uc808\ud558\uae30|reject|deny/i.test(text);
-  const hasAllowButton = /\ud5c8\uc6a9\ud558\uae30|allow|approve/i.test(text);
+  const hasAllowButton = /\ud5c8\uc6a9\ud558\uae30|allow|approve/i.test(text) ||
+    ALLOW_ONCE_TEXT_PATTERN.test(text);
 
   return hasPermissionText && hasAllowButton && (hasRejectButton || text.includes("chatgpt"));
 }
@@ -164,17 +518,6 @@ function fireMouseLikeEvent(element, type) {
   element.dispatchEvent(new EventClass(type, options));
 }
 
-function clickLikeUser(button) {
-  button.scrollIntoView({ block: "center", inline: "center" });
-  button.focus({ preventScroll: true });
-
-  for (const type of ["pointerover", "pointerenter", "mouseover", "mouseenter", "pointerdown", "mousedown", "pointerup", "mouseup", "click"]) {
-    fireMouseLikeEvent(button, type);
-  }
-
-  button.click();
-}
-
 function clickOnceLikeUser(button) {
   button.scrollIntoView({ block: "center", inline: "center" });
   button.focus({ preventScroll: true });
@@ -225,27 +568,116 @@ function getSettingsDialog() {
   return [...document.querySelectorAll("[role='dialog']")].find(isVisible) || null;
 }
 
-function getInstalledPluginEntries() {
-  const dialog = getSettingsDialog();
-  if (!dialog) {
+function classifyPluginPage(pathname) {
+  const path = String(pathname || "/").replace(/\/+$/, "") || "/";
+  if (path === PLUGIN_SETTINGS_PATH) {
+    return "list";
+  }
+  const detailPath = `${PLUGIN_SETTINGS_PATH}/`;
+  if (path.startsWith(detailPath) && !path.slice(detailPath.length).includes("/")) {
+    return "detail";
+  }
+  return "other";
+}
+
+function findExactControl(root, acceptedTexts, selector = "button, [role='button'], [role='menuitem'], a") {
+  const controls = [...root.querySelectorAll(selector)].filter(
+    (control) => isVisible(control) && acceptedTexts.has(getText(control))
+  );
+  if (controls.length > 1) {
+    throw new Error(`같은 작업 컨트롤이 ${controls.length}개 발견됐습니다.`);
+  }
+  return controls[0] || null;
+}
+
+function findExactLink(root, acceptedTexts) {
+  return findExactControl(root, acceptedTexts, "a, [role='link']");
+}
+
+function findExactMenuItem(root, acceptedTexts) {
+  return findExactControl(root, acceptedTexts, "[role='menuitem']");
+}
+
+function getModernPluginRowButtons(section) {
+  return [...section.querySelectorAll("button")].filter(
+    (button) => isVisible(button) && !button.hasAttribute("aria-haspopup")
+  );
+}
+
+function classifyModernPluginRow(button) {
+  const statusContainer = button.lastElementChild;
+  if (statusContainer?.tagName !== "DIV") {
+    return "unknown";
+  }
+  const statusLabels = [...statusContainer.querySelectorAll("span")];
+  if (statusLabels.length === 0) {
+    return "unknown";
+  }
+  return statusLabels.some((label) => normalize(label.textContent))
+    ? "tool-permission"
+    : "no-tool-permission";
+}
+
+function shouldFastSkipPluginRow(rowKind, inspectAll, hasPermissionedEntries) {
+  return !inspectAll && hasPermissionedEntries && rowKind === "no-tool-permission";
+}
+
+function getModernPluginListSections() {
+  const search = document.querySelector("#installed-plugins-search");
+  const description = findOwnTextElement(document, INSTALLED_DESCRIPTION_TEXTS);
+  if (!search || !description || !comesBefore(description, search)) {
     return [];
   }
 
-  const description = findOwnTextElement(dialog, INSTALLED_DESCRIPTION_TEXTS);
-  if (!description) {
-    return [];
-  }
-
-  const browsePlugins = findOwnTextElement(dialog, BROWSE_PLUGIN_TEXTS);
-  const buttons = [...dialog.querySelectorAll("button")].filter((button) => {
-    const text = getText(button);
-    return (
-      text &&
-      isVisible(button) &&
-      comesBefore(description, button) &&
-      (!browsePlugins || (!button.contains(browsePlugins) && comesBefore(button, browsePlugins)))
+  // The installed list can have multiple sections. Find the nearest container
+  // shared with the search field so unrelated page sections are not swept in.
+  let container = search.parentElement;
+  let sections = [];
+  while (container && sections.length === 0) {
+    sections = [...container.querySelectorAll("section")].filter(
+      (section) =>
+        isVisible(section) &&
+        getModernPluginRowButtons(section).length > 0 &&
+        comesBefore(search, section)
     );
-  });
+    container = container.parentElement;
+  }
+  return sections.filter(
+    (section) => !sections.some((other) => other !== section && other.contains(section))
+  );
+}
+
+function getInstalledPluginEntries() {
+  const search = document.querySelector("#installed-plugins-search");
+  let buttons;
+
+  if (search) {
+    buttons = getModernPluginListSections().flatMap((section) =>
+      getModernPluginRowButtons(section)
+    );
+  } else {
+    const dialog = getSettingsDialog();
+    if (!dialog) {
+      return [];
+    }
+
+    const description = findOwnTextElement(dialog, INSTALLED_DESCRIPTION_TEXTS);
+    if (!description) {
+      return [];
+    }
+
+    const browsePlugins = findOwnTextElement(dialog, BROWSE_PLUGIN_TEXTS);
+    buttons = [...dialog.querySelectorAll("button")].filter((button) => {
+      const text = getText(button);
+      return (
+        text &&
+        isVisible(button) &&
+        comesBefore(description, button) &&
+        (!browsePlugins || (!button.contains(browsePlugins) && comesBefore(button, browsePlugins)))
+      );
+    });
+  }
+
   // The row can contain mutable secondary text such as a permission mode
   // (for example, `모두 허용`).  Keep only the stable first line as the
   // plugin identity so a React re-render does not make a queued target vanish.
@@ -269,6 +701,19 @@ function findExactButton(root, acceptedTexts) {
   return buttons[0] || null;
 }
 
+function findProfileMenuButton(root = document) {
+  const buttons = [...root.querySelectorAll("button[aria-label]")].filter(
+    (button) =>
+      isVisible(button) &&
+      !isControlDisabled(button) &&
+      PROFILE_MENU_TEXTS.has(normalize(button.getAttribute("aria-label")))
+  );
+  if (buttons.length > 1) {
+    throw new Error(`프로필 메뉴 버튼이 ${buttons.length}개 보입니다.`);
+  }
+  return buttons[0] || null;
+}
+
 function classifyPluginDetail(refreshButton, infoHeading) {
   if (refreshButton) {
     return "refresh";
@@ -279,13 +724,63 @@ function classifyPluginDetail(refreshButton, infoHeading) {
   return "loading";
 }
 
-function getPluginDetailDecision(dialog) {
-  const refreshButton = findExactButton(dialog, REFRESH_BUTTON_TEXTS);
-  const infoHeading = [...dialog.querySelectorAll("h1, h2, h3, h4, [role='heading']")].find(
-    (heading) => DETAIL_INFO_TEXTS.has(getText(heading))
-  );
+function getPluginDetailDecision(root) {
+  const modernDetail = classifyPluginPage(window.location.pathname) === "detail";
+  const navigationControl = modernDetail
+    ? findExactLink(root, PLUGIN_BREADCRUMB_TEXTS)
+    : findExactButton(root, BACK_BUTTON_TEXTS);
+  const infoHeading = findOwnTextElement(root, DETAIL_INFO_TEXTS);
+  const skillsHeading = findOwnTextElement(root, DETAIL_SKILLS_TEXTS);
+  const connectedAccounts = findOwnTextElement(root, CONNECTED_ACCOUNT_TEXTS);
+  const appManagement = findOwnTextElement(root, APP_MANAGEMENT_TEXTS);
+  const isDeveloperModeApp = findOwnTextElement(root, DEV_MODE_VERSION_TEXTS) !== undefined;
+  const refreshButton = findExactButton(root, REFRESH_BUTTON_TEXTS);
+  const detailReady = isPluginDetailReady({
+    modernDetail,
+    hasNavigation: Boolean(navigationControl),
+    hasInfo: Boolean(infoHeading),
+    hasSkills: Boolean(skillsHeading),
+    hasConnectedAccounts: Boolean(connectedAccounts),
+    hasAppManagement: Boolean(appManagement),
+    isDeveloperModeApp
+  });
+
+  if (!detailReady) {
+    return null;
+  }
+
   const kind = classifyPluginDetail(refreshButton, infoHeading);
-  return kind === "loading" ? null : { kind, refreshButton };
+  return kind === "loading"
+    ? null
+    : { kind, refreshButton, hasSkills: Boolean(skillsHeading), hasAppManagement: Boolean(appManagement) };
+}
+
+function isPluginDetailReady({
+  modernDetail,
+  hasNavigation,
+  hasInfo,
+  hasSkills,
+  hasConnectedAccounts,
+  hasAppManagement,
+  isDeveloperModeApp
+}) {
+  if (!hasNavigation || !hasInfo) {
+    return false;
+  }
+  if (
+    modernDetail &&
+    ((!hasConnectedAccounts && !hasAppManagement && !hasSkills) ||
+      (isDeveloperModeApp && !hasAppManagement))
+  ) {
+    return false;
+  }
+  return true;
+}
+
+function getPluginDetailRoot() {
+  return classifyPluginPage(window.location.pathname) === "detail"
+    ? document
+    : getSettingsDialog();
 }
 
 function isControlDisabled(control) {
@@ -299,7 +794,12 @@ function isControlDisabled(control) {
 function waitForCondition(predicate, timeoutMs, timeoutMessage) {
   return new Promise((resolve, reject) => {
     let observer;
+    let settled = false;
     const finish = (error, value) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
       window.clearTimeout(timer);
       observer?.disconnect();
       if (error) {
@@ -318,10 +818,14 @@ function waitForCondition(predicate, timeoutMs, timeoutMessage) {
         finish(error);
       }
     };
-    const timer = window.setTimeout(
-      () => finish(new Error(timeoutMessage)),
-      timeoutMs
-    );
+    const timer = window.setTimeout(() => {
+      // Some controls update their DOM properties without a mutation record.
+      // Check once more before reporting a completion timeout.
+      check();
+      if (!settled) {
+        finish(new Error(timeoutMessage));
+      }
+    }, timeoutMs);
 
     observer = new MutationObserver(check);
     observer.observe(document.documentElement, {
@@ -338,8 +842,56 @@ async function openPluginSettings() {
     throw new Error("ChatGPT 탭에서 실행하세요.");
   }
 
-  if (window.location.hash !== "#settings/Plugins") {
-    window.location.hash = "settings/Plugins";
+  const page = classifyPluginPage(window.location.pathname);
+  if (page === "detail") {
+    await returnToPluginList({ name: "현재 플러그인" });
+  } else if (page === "list") {
+    await waitForCondition(
+      () => getInstalledPluginEntries().length > 0,
+      15000,
+      "설치된 플러그인 목록을 열지 못했습니다."
+    );
+    return;
+  } else if (window.location.hash === "#settings/Plugins") {
+    await waitForCondition(
+      () => getInstalledPluginEntries().length > 0,
+      15000,
+      "설치된 플러그인 목록을 열지 못했습니다."
+    );
+    return;
+  }
+
+  if (!window.location.pathname.startsWith("/settings/")) {
+    let settingsMenuItem = findExactMenuItem(document, SETTINGS_MENU_ITEM_TEXTS);
+    if (!settingsMenuItem) {
+      const profileMenuButton = await waitForCondition(
+        () => findProfileMenuButton(),
+        10000,
+        "프로필 메뉴를 찾지 못했습니다."
+      );
+      clickOnceLikeUser(profileMenuButton);
+      settingsMenuItem = await waitForCondition(
+        () => findExactMenuItem(document, SETTINGS_MENU_ITEM_TEXTS),
+        10000,
+        "ChatGPT 설정 메뉴를 열지 못했습니다."
+      );
+    }
+
+    clickOnceLikeUser(settingsMenuItem);
+    await waitForCondition(
+      () => window.location.pathname.startsWith("/settings/"),
+      15000,
+      "ChatGPT 설정 화면을 열지 못했습니다."
+    );
+  }
+
+  if (classifyPluginPage(window.location.pathname) !== "list") {
+    const pluginsButton = await waitForCondition(
+      () => findExactButton(document, PLUGIN_SETTINGS_NAV_TEXTS),
+      10000,
+      "플러그인 설정 항목을 찾지 못했습니다."
+    );
+    clickOnceLikeUser(pluginsButton);
   }
 
   await waitForCondition(
@@ -370,11 +922,18 @@ async function openPluginDetail(target) {
   clickOnceLikeUser(entry.button);
   await waitForCondition(
     () => {
+      if (classifyPluginPage(window.location.pathname) === "detail") {
+        const heading = [...document.querySelectorAll("h1, h2, h3, h4, [role='heading']")].find(
+          (candidate) => normalize(getText(candidate)) === normalize(target.name)
+        );
+        return heading && getPluginDetailDecision(document);
+      }
+
       const dialog = getSettingsDialog();
       return (
         window.location.hash.startsWith("#settings/Plugins/") &&
         dialog &&
-        findExactButton(dialog, BACK_BUTTON_TEXTS)
+        getPluginDetailDecision(dialog)
       );
     },
     10000,
@@ -383,6 +942,23 @@ async function openPluginDetail(target) {
 }
 
 async function returnToPluginList(target) {
+  if (classifyPluginPage(window.location.pathname) === "detail") {
+    const breadcrumb = findExactLink(document, PLUGIN_BREADCRUMB_TEXTS);
+    if (!breadcrumb) {
+      throw new Error(`${target.name}: 플러그인 목록 이동 경로를 찾지 못했습니다.`);
+    }
+
+    clickOnceLikeUser(breadcrumb);
+    await waitForCondition(
+      () =>
+        classifyPluginPage(window.location.pathname) === "list" &&
+        getInstalledPluginEntries().length > 0,
+      10000,
+      `${target.name}: 플러그인 목록으로 돌아오지 못했습니다.`
+    );
+    return;
+  }
+
   const dialog = getSettingsDialog();
   const backButton = dialog && findExactButton(dialog, BACK_BUTTON_TEXTS);
   if (!backButton) {
@@ -391,7 +967,10 @@ async function returnToPluginList(target) {
 
   clickOnceLikeUser(backButton);
   await waitForCondition(
-    () => window.location.hash === "#settings/Plugins" && getInstalledPluginEntries().length > 0,
+    () =>
+      (window.location.hash === "#settings/Plugins" ||
+        classifyPluginPage(window.location.pathname) === "list") &&
+      getInstalledPluginEntries().length > 0,
     10000,
     `${target.name}: 플러그인 목록으로 돌아오지 못했습니다.`
   );
@@ -411,14 +990,14 @@ async function closePluginSettings() {
   );
 }
 
-function showPluginRefreshNotice(message, isError = false) {
-  document.getElementById("chatgpt-auto-allow-refresh-notice")?.remove();
+function showAutomationNotice(id, message, isError, dismissLabel) {
+  document.getElementById(id)?.remove();
   if (!document.body) {
     return;
   }
 
   const notice = document.createElement("div");
-  notice.id = "chatgpt-auto-allow-refresh-notice";
+  notice.id = id;
   notice.setAttribute("role", isError ? "alert" : "status");
   notice.setAttribute("aria-live", isError ? "assertive" : "polite");
   notice.style.cssText = `position:fixed;top:16px;right:16px;z-index:2147483647;display:flex;align-items:center;gap:12px;max-width:420px;padding:12px 14px;border-radius:10px;background:${isError ? "#991b1b" : "#166534"};color:#fff;font:600 14px/1.4 system-ui,sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.3)`;
@@ -427,7 +1006,7 @@ function showPluginRefreshNotice(message, isError = false) {
   text.textContent = message;
   const dismiss = document.createElement("button");
   dismiss.type = "button";
-  dismiss.setAttribute("aria-label", "완료 알림 닫기");
+  dismiss.setAttribute("aria-label", dismissLabel);
   dismiss.textContent = "×";
   dismiss.style.cssText = "border:0;background:transparent;color:inherit;font:700 20px/1 system-ui,sans-serif;cursor:pointer";
   dismiss.addEventListener("click", () => notice.remove());
@@ -435,13 +1014,31 @@ function showPluginRefreshNotice(message, isError = false) {
   document.body.appendChild(notice);
 }
 
+function showPluginRefreshNotice(message, isError = false) {
+  showAutomationNotice(
+    "chatgpt-auto-allow-refresh-notice",
+    message,
+    isError,
+    "새로고침 알림 닫기"
+  );
+}
+
+function showAutoContinueNotice(message, isError = false) {
+  showAutomationNotice(
+    "chatgpt-auto-allow-continue-notice",
+    message,
+    isError,
+    "자동 이어서 진행 알림 닫기"
+  );
+}
+
 async function refreshCurrentPlugin(target) {
   let decision;
   try {
     decision = await waitForCondition(
       () => {
-        const dialog = getSettingsDialog();
-        return dialog && getPluginDetailDecision(dialog);
+        const detailRoot = getPluginDetailRoot();
+        return detailRoot && getPluginDetailDecision(detailRoot);
       },
       10000,
       `${target.name}: 새로 고침 기능을 확인하지 못했습니다.`
@@ -452,11 +1049,15 @@ async function refreshCurrentPlugin(target) {
   }
 
   if (decision.kind === "skip") {
+    if (decision.hasSkills && !decision.hasAppManagement) {
+      pluginRefreshState.skipped += 1;
+      return;
+    }
     try {
       const refreshButton = await waitForCondition(
         () => {
-          const dialog = getSettingsDialog();
-          return dialog && findExactButton(dialog, REFRESH_BUTTON_TEXTS);
+          const detailRoot = getPluginDetailRoot();
+          return detailRoot && findExactButton(detailRoot, REFRESH_BUTTON_TEXTS);
         },
         750,
         `${target.name}: 새로 고침 버튼이 없습니다.`
@@ -476,8 +1077,8 @@ async function refreshCurrentPlugin(target) {
   clickOnceLikeUser(refreshButton);
   await waitForCondition(
     () => {
-      const currentDialog = getSettingsDialog();
-      const currentButton = currentDialog && findExactButton(currentDialog, REFRESH_BUTTON_TEXTS);
+      const detailRoot = getPluginDetailRoot();
+      const currentButton = detailRoot && findExactButton(detailRoot, REFRESH_BUTTON_TEXTS);
       return currentButton && isControlDisabled(currentButton);
     },
     5000,
@@ -485,11 +1086,11 @@ async function refreshCurrentPlugin(target) {
   );
   await waitForCondition(
     () => {
-      const currentDialog = getSettingsDialog();
-      const currentButton = currentDialog && findExactButton(currentDialog, REFRESH_BUTTON_TEXTS);
+      const detailRoot = getPluginDetailRoot();
+      const currentButton = detailRoot && findExactButton(detailRoot, REFRESH_BUTTON_TEXTS);
       return currentButton && !isControlDisabled(currentButton);
     },
-    60000,
+    REFRESH_COMPLETION_TIMEOUT_MS,
     `${target.name}: 새로 고침 완료 대기 시간이 초과됐습니다.`
   );
   pluginRefreshState.completed += 1;
@@ -499,19 +1100,26 @@ function snapshotPluginRefreshState() {
   return { ...pluginRefreshState };
 }
 
-async function refreshConnectedPlugins({ auto = false, previousRunAt = 0 } = {}) {
+async function refreshConnectedPlugins({ auto = false, previousRunAt = 0, inspectAll = false } = {}) {
   Object.assign(pluginRefreshState, {
     status: "running",
     total: 0,
     completed: 0,
     skipped: 0,
     current: "",
+    currentStartedAt: 0,
     error: ""
   });
 
   try {
     await openPluginSettings();
-    const targets = getInstalledPluginEntries().map(({ key, name }) => ({ key, name }));
+    const modernList = Boolean(document.querySelector("#installed-plugins-search"));
+    const targets = getInstalledPluginEntries().map(({ key, name, button }) => ({
+      key,
+      name,
+      rowKind: modernList ? classifyModernPluginRow(button) : "unknown"
+    }));
+    const hasPermissionedEntries = targets.some((target) => target.rowKind === "tool-permission");
     pluginRefreshState.total = targets.length;
 
     for (const target of targets) {
@@ -523,11 +1131,17 @@ async function refreshConnectedPlugins({ auto = false, previousRunAt = 0 } = {})
         await closePluginSettings();
         await releaseAutoRefreshSlot(previousRunAt);
         pluginRefreshState.current = "";
+        pluginRefreshState.currentStartedAt = 0;
         pluginRefreshState.status = "aborted";
         return;
       }
 
       pluginRefreshState.current = target.name;
+      pluginRefreshState.currentStartedAt = Date.now();
+      if (shouldFastSkipPluginRow(target.rowKind, inspectAll, hasPermissionedEntries)) {
+        pluginRefreshState.skipped += 1;
+        continue;
+      }
       await openPluginDetail(target);
       await refreshCurrentPlugin(target);
       await returnToPluginList(target);
@@ -535,6 +1149,7 @@ async function refreshConnectedPlugins({ auto = false, previousRunAt = 0 } = {})
 
     await closePluginSettings();
     pluginRefreshState.current = "";
+    pluginRefreshState.currentStartedAt = 0;
     pluginRefreshState.status = "done";
     if (!auto) {
       showPluginRefreshNotice(
@@ -605,7 +1220,7 @@ function clickButton(button) {
       return;
     }
     clickedButtons.add(button);
-    clickLikeUser(button);
+    clickOnceLikeUser(button);
   }, Number(settings.clickDelayMs) || DEFAULT_SETTINGS.clickDelayMs);
 }
 
@@ -614,13 +1229,24 @@ function scan() {
   for (const button of buttons) {
     if (shouldClick(button)) {
       clickButton(button);
-      return;
+      break;
     }
   }
+  scanAutoContinue();
 }
 
 async function loadSettings() {
-  const stored = await chrome.storage.sync.get(DEFAULT_SETTINGS);
+  const stored = await chrome.storage.sync.get({
+    ...DEFAULT_SETTINGS,
+    [AUTO_CONTINUE_DEFAULT_MIGRATION_KEY]: false
+  });
+
+  const migration = getAutoContinueDefaultMigration(stored);
+  if (migration) {
+    await chrome.storage.sync.set(migration);
+    Object.assign(stored, migration);
+  }
+
   settings = { ...DEFAULT_SETTINGS, ...stored };
 
   if (settings.deniedKeywords === OLD_DENY_DEFAULT) {
@@ -630,6 +1256,7 @@ async function loadSettings() {
 
   const localState = await chrome.storage.local.get({ [AUTO_REFRESH_LAST_RUN_KEY]: 0 });
   autoRefreshLastRunAt = Number(localState[AUTO_REFRESH_LAST_RUN_KEY]) || 0;
+  await loadAutoContinueTabOverride();
 }
 
 chrome.storage.onChanged.addListener((changes, area) => {
@@ -643,13 +1270,38 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== "sync") {
     return;
   }
+  const previousAutoContinueEnabled = isAutoContinueEnabled();
   for (const [key, change] of Object.entries(changes)) {
     settings[key] = change.newValue;
+  }
+  if (
+    (changes.enabled && !changes.enabled.newValue) ||
+    (previousAutoContinueEnabled && !isAutoContinueEnabled())
+  ) {
+    resetAutoContinueTracking();
+  }
+  if (changes.autoContinueMaxTurns) {
+    settings.autoContinueMaxTurns = normalizeAutoContinueMaxTurns(
+      changes.autoContinueMaxTurns.newValue
+    );
   }
   scan();
 });
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message?.type === "get-tab-auto-continue-state") {
+    sendResponse(snapshotAutoContinueTabState());
+    return;
+  }
+
+  if (message?.type === "set-tab-auto-continue-enabled") {
+    setAutoContinueForThisTab(message.enabled).then(
+      sendResponse,
+      (error) => sendResponse({ error: error instanceof Error ? error.message : String(error) })
+    );
+    return true;
+  }
+
   if (message?.type === "get-plugin-refresh-state") {
     sendResponse(snapshotPluginRefreshState());
     return;
@@ -657,7 +1309,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   if (message?.type === "refresh-connected-plugins") {
     if (!pluginRefreshPromise) {
-      pluginRefreshPromise = refreshConnectedPlugins();
+      pluginRefreshPromise = refreshConnectedPlugins({ inspectAll: message.inspectAll === true });
     }
     sendResponse(snapshotPluginRefreshState());
   }
@@ -666,6 +1318,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 const observer = new MutationObserver(() => scan());
 
 loadSettings().then(() => {
+  settings.autoContinueMaxTurns = normalizeAutoContinueMaxTurns(
+    settings.autoContinueMaxTurns
+  );
+  initializeAutoContinue();
   scan();
   // ponytail: the automatic run rides the existing scan interval, so it needs an
   // open ChatGPT tab and can stall if Chrome freezes that tab mid-sweep. It

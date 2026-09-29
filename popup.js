@@ -2,17 +2,37 @@ const DEFAULT_SETTINGS = {
   enabled: true,
   clickDelayMs: 300,
   allowedTools: "",
-  deniedKeywords: ""
+  deniedKeywords: "",
+  autoContinueEnabled: false,
+  autoContinueMaxTurns: 1
 };
+const AUTO_CONTINUE_DEFAULT_MIGRATION_KEY = "autoContinueDefaultOffApplied";
 
 const enabled = document.querySelector("#enabled");
+const autoContinueEnabled = document.querySelector("#autoContinueEnabled");
+const autoContinueScope = document.querySelector("#autoContinueScope");
 const stateText = document.querySelector("#stateText");
 const delayText = document.querySelector("#delayText");
 const allowText = document.querySelector("#allowText");
 const optionsButton = document.querySelector("#options");
 const refreshPluginsButton = document.querySelector("#refreshPlugins");
+const inspectAllPlugins = document.querySelector("#inspectAllPlugins");
 const refreshStatus = document.querySelector("#refreshStatus");
 let refreshStateTimer = null;
+
+function getAutoContinueDefaultMigration(settings) {
+  if (settings[AUTO_CONTINUE_DEFAULT_MIGRATION_KEY]) {
+    return null;
+  }
+
+  const migration = {
+    [AUTO_CONTINUE_DEFAULT_MIGRATION_KEY]: true
+  };
+  if (settings.autoContinueEnabled !== DEFAULT_SETTINGS.autoContinueEnabled) {
+    migration.autoContinueEnabled = DEFAULT_SETTINGS.autoContinueEnabled;
+  }
+  return migration;
+}
 
 function render(settings) {
   enabled.checked = Boolean(settings.enabled);
@@ -22,7 +42,15 @@ function render(settings) {
 }
 
 async function loadSettings() {
-  const settings = await chrome.storage.sync.get(DEFAULT_SETTINGS);
+  const settings = await chrome.storage.sync.get({
+    ...DEFAULT_SETTINGS,
+    [AUTO_CONTINUE_DEFAULT_MIGRATION_KEY]: false
+  });
+  const migration = getAutoContinueDefaultMigration(settings);
+  if (migration) {
+    await chrome.storage.sync.set(migration);
+    Object.assign(settings, migration);
+  }
   render(settings);
 }
 
@@ -32,6 +60,21 @@ enabled.addEventListener("change", async () => {
   render(settings);
 });
 
+autoContinueEnabled.addEventListener("change", async () => {
+  autoContinueEnabled.disabled = true;
+  try {
+    const state = await sendToActiveTab("set-tab-auto-continue-enabled", {
+      enabled: autoContinueEnabled.checked
+    });
+    if (state?.error) {
+      throw new Error(state.error);
+    }
+    renderAutoContinueTabState(state);
+  } catch {
+    autoContinueScope.textContent = "ChatGPT 탭을 새로고침한 뒤 다시 시도하세요.";
+  }
+});
+
 optionsButton.addEventListener("click", () => {
   chrome.runtime.openOptionsPage();
 });
@@ -39,9 +82,13 @@ optionsButton.addEventListener("click", () => {
 function renderRefreshState(state) {
   const processed = Number(state.completed || 0) + Number(state.skipped || 0);
   refreshPluginsButton.disabled = state.status === "running";
+  inspectAllPlugins.disabled = state.status === "running";
 
   if (state.status === "running") {
-    refreshStatus.textContent = `${processed}/${state.total || "?"} 처리 중 · ${state.current || "목록 확인"}`;
+    const elapsed = state.currentStartedAt
+      ? ` · ${Math.floor((Date.now() - state.currentStartedAt) / 1000)}초`
+      : "";
+    refreshStatus.textContent = `${processed}/${state.total || "?"} 처리 중 · ${state.current || "목록 확인"}${elapsed}`;
     return;
   }
   if (state.status === "done") {
@@ -55,12 +102,34 @@ function renderRefreshState(state) {
   refreshStatus.textContent = "대기 중";
 }
 
-async function sendToActiveTab(type) {
+function renderAutoContinueTabState(state) {
+  autoContinueEnabled.checked = Boolean(state.effectiveEnabled);
+  autoContinueEnabled.disabled = false;
+  if (typeof state.tabOverride === "boolean") {
+    autoContinueScope.textContent = state.tabOverride
+      ? "현재 탭만 별도로 켜짐"
+      : "현재 탭만 별도로 꺼짐";
+    return;
+  }
+  autoContinueScope.textContent = `기본값 사용 중 · ${state.globalEnabled ? "켜짐" : "꺼짐"}`;
+}
+
+async function sendToActiveTab(type, payload = {}) {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id) {
     throw new Error("활성 탭을 찾지 못했습니다.");
   }
-  return chrome.tabs.sendMessage(tab.id, { type });
+  return chrome.tabs.sendMessage(tab.id, { type, ...payload });
+}
+
+async function updateAutoContinueTabState() {
+  try {
+    const state = await sendToActiveTab("get-tab-auto-continue-state");
+    renderAutoContinueTabState(state);
+  } catch {
+    autoContinueEnabled.disabled = true;
+    autoContinueScope.textContent = "현재 페이지는 ChatGPT 탭이 아닙니다.";
+  }
 }
 
 function stopRefreshStateUpdates() {
@@ -93,7 +162,9 @@ refreshPluginsButton.addEventListener("click", async () => {
   refreshPluginsButton.disabled = true;
   refreshStatus.textContent = "플러그인 목록 여는 중";
   try {
-    const state = await sendToActiveTab("refresh-connected-plugins");
+    const state = await sendToActiveTab("refresh-connected-plugins", {
+      inspectAll: inspectAllPlugins.checked
+    });
     renderRefreshState(state);
     startRefreshStateUpdates();
   } catch (error) {
@@ -102,5 +173,8 @@ refreshPluginsButton.addEventListener("click", async () => {
   }
 });
 
-loadSettings();
+loadSettings().then(
+  () => updateAutoContinueTabState(),
+  () => updateAutoContinueTabState()
+);
 updateRefreshState();

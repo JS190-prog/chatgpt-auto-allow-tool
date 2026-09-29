@@ -1,5 +1,49 @@
 # Changelog
 
+## 0.5.7
+
+- Recognized any direct app-detail route below ChatGPT plugin settings, including new route prefixes used by skills-only apps. These loaded details are skipped without stopping the refresh sweep when no refresh action exists.
+- Added recognition for the Pro permission button labeled `한 번만 허용`, including the Enter-key hint, while leaving its adjacent options menu untouched.
+
+## 0.5.6
+
+- Added a faster default refresh that skips installed rows without a visible tool-permission status; the popup can still inspect every app.
+- Skipped loaded skills-only details immediately, showed each app's elapsed time in the popup, and allowed up to three minutes for a slow tool refresh to finish.
+- Rechecked the button state at the completion deadline so a missed DOM mutation cannot cause a false timeout.
+
+## 0.5.5
+
+- Excluded the Pro account's default-permissions menu section from installed plugin rows; its popup button must never be treated as a plugin refresh target.
+
+## 0.5.4
+
+- Recognized loaded skills-only plugin details, including Default templates, Documents, and PDF, so entries without a refresh action are skipped and the sweep continues.
+
+## 0.5.3
+
+- Scoped installed-plugin discovery to the search field's list container and included multiple installed sections, fixing the Pro account's two-section refresh stop.
+
+## 0.5.2
+
+- Restored refresh entry from ChatGPT chat pages by finding the visible profile-menu button through its accessibility label, even when its displayed text is an account initial.
+
+## 0.5.1
+
+- Updated the connected-app refresh sweep for ChatGPT's current app-management dashboard and its `도구 새로 고침` action.
+
+## 0.5.0
+
+- Added per-tab automatic-continuation controls in the popup while keeping the option-page value as the default for tabs without an override.
+- Persists each tab override in extension session storage across page reloads and removes it when the tab closes.
+- Prevents the popup's current-tab toggle from changing every open ChatGPT tab.
+
+## 0.4.0
+
+- Added opt-in automatic continuation after a newly generated ChatGPT response completes.
+- Added a configurable continuation prompt and a 1–100 maximum automatic continuation count per user-started response chain.
+- Requires an observed generation-to-completion transition and tracks handled assistant messages to prevent old or rerendered responses from being submitted twice.
+- Shows an accessible top-right progress notice after each confirmed automatic send and a completion notice after the final follow-up response.
+
 ## 0.3.1
 
 - Stabilized installed-plugin identity across permission/status re-renders so queued refresh targets do not disappear between list and detail views.

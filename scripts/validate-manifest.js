@@ -28,6 +28,10 @@ if (manifest.action?.default_popup && !fs.existsSync(manifest.action.default_pop
   throw new Error(`Missing action popup: ${manifest.action.default_popup}`);
 }
 
+if (manifest.background?.service_worker && !fs.existsSync(manifest.background.service_worker)) {
+  throw new Error(`Missing service worker: ${manifest.background.service_worker}`);
+}
+
 for (const [size, file] of Object.entries(manifest.icons || {})) {
   if (!fs.existsSync(file)) {
     throw new Error(`Missing extension icon ${size}: ${file}`);

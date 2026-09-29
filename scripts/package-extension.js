@@ -10,6 +10,7 @@ const outFile = path.join(outDir, `chatgpt-auto-allow-tool-${manifest.version}.z
 
 const files = [
   "manifest.json",
+  "background.js",
   "content.js",
   "options.html",
   "options.css",
@@ -40,10 +41,14 @@ const powershellPaths = archivePaths
   .join(",");
 const powershellOutput = path.resolve(outFile).replaceAll("'", "''");
 const command = `Compress-Archive -LiteralPath @(${powershellPaths}) -DestinationPath '${powershellOutput}' -CompressionLevel Optimal`;
-const powershell = process.platform === "win32" ? "powershell" : "pwsh";
+const powershell = process.env.CHATGPT_AUTO_ALLOW_PWSH || "pwsh";
 
-childProcess.execFileSync(powershell, ["-NoProfile", "-Command", command], {
-  stdio: "inherit"
-});
+childProcess.execFileSync(
+  powershell,
+  ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command],
+  {
+    stdio: "inherit"
+  }
+);
 
 console.log(`Packaged ${outFile}`);

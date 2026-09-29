@@ -38,7 +38,7 @@ const context = {
   window: {
     clearTimeout,
     getComputedStyle: () => ({}),
-    location: { hash: "", hostname: "chatgpt.com" },
+    location: { hash: "", hostname: "chatgpt.com", pathname: "/" },
     setInterval: () => 0,
     setTimeout
   }
@@ -73,14 +73,240 @@ assert.strictEqual(
 assert.strictEqual(context.classifyPluginDetail({}, null), "refresh");
 assert.strictEqual(context.classifyPluginDetail(null, {}), "skip");
 assert.strictEqual(context.classifyPluginDetail(null, null), "loading");
+assert.strictEqual(context.classifyPluginPage("/settings/plugins-settings"), "list");
+assert.strictEqual(context.classifyPluginPage("/settings/plugins-settings/"), "list");
+assert.strictEqual(
+  context.classifyPluginPage("/settings/plugins-settings/plugin_asdk_app_123"),
+  "detail"
+);
+assert.strictEqual(
+  context.classifyPluginPage("/settings/plugins-settings/plugins_123"),
+  "detail",
+  "installed apps can use a different detail-route prefix"
+);
+assert.strictEqual(
+  context.classifyPluginPage("/settings/plugins-settings/new-provider-id/"),
+  "detail",
+  "detail navigation must not depend on a provider-specific slug"
+);
+assert.strictEqual(
+  context.classifyPluginPage("/settings/plugins-settings/new-provider-id/other"),
+  "other",
+  "nested settings paths are not app details"
+);
+assert.strictEqual(context.classifyPluginPage("/settings/general-settings"), "other");
+assert.strictEqual(vm.runInContext('REFRESH_BUTTON_TEXTS.has("도구 새로 고침")', context), true);
+assert.strictEqual(vm.runInContext('REFRESH_BUTTON_TEXTS.has("refresh tools")', context), true);
+class FakeProfileButton extends FakeElement {
+  constructor({ width, disabled = false }) {
+    super();
+    this.innerText = "계정 이니셜";
+    this.disabled = disabled;
+    this.width = width;
+  }
+
+  getAttribute(name) {
+    return name === "aria-label" ? "프로필 메뉴 열기" : null;
+  }
+
+  hasAttribute() {
+    return false;
+  }
+
+  getBoundingClientRect() {
+    return { width: this.width, height: this.width };
+  }
+}
+const hiddenProfileButton = new FakeProfileButton({ width: 0 });
+const loadingProfileButton = new FakeProfileButton({ width: 48, disabled: true });
+const visibleProfileButton = new FakeProfileButton({ width: 48 });
+assert.notStrictEqual(context.getText(visibleProfileButton), "프로필 메뉴 열기");
+assert.strictEqual(
+  context.findProfileMenuButton({
+    querySelectorAll: () => [hiddenProfileButton, loadingProfileButton, visibleProfileButton]
+  }),
+  visibleProfileButton,
+  "the visible enabled profile button is identified by aria-label despite its account text"
+);
+class FakePluginNode extends FakeElement {
+  constructor(tagName, { id = "", ownText = "", innerText = "", hasPopup = false } = {}) {
+    super();
+    this.tagName = tagName.toUpperCase();
+    this.id = id;
+    this.innerText = innerText;
+    this.hasPopup = hasPopup;
+    this.childNodes = ownText ? [{ nodeType: 3, textContent: ownText }] : [];
+    this.children = [];
+    this.parentElement = null;
+  }
+
+  append(child) {
+    child.parentElement = this;
+    this.children.push(child);
+    return child;
+  }
+
+  querySelectorAll(selector) {
+    const descendants = this.children.flatMap((child) => [child, ...child.querySelectorAll("*")]);
+    return selector === "*"
+      ? descendants
+      : descendants.filter((child) => child.tagName.toLowerCase() === selector);
+  }
+
+  getBoundingClientRect() {
+    return { width: 100, height: 40 };
+  }
+
+  hasAttribute(name) {
+    return name === "aria-haspopup" && this.hasPopup;
+  }
+
+  compareDocumentPosition(other) {
+    return this.order < other.order ? 4 : 0;
+  }
+
+  contains(other) {
+    return other === this || this.children.some((child) => child.contains(other));
+  }
+}
+const pluginPage = new FakePluginNode("main");
+const installedContainer = pluginPage.append(new FakePluginNode("div"));
+installedContainer.append(new FakePluginNode("p", {
+  ownText: "플러그인, 연결된 계정 및 권한을 관리합니다"
+}));
+const searchWrap = installedContainer.append(new FakePluginNode("div"));
+searchWrap.append(new FakePluginNode("input", { id: "installed-plugins-search" }));
+const permissionsSection = installedContainer.append(new FakePluginNode("section"));
+permissionsSection.append(new FakePluginNode("button", {
+  innerText: "위험도가 낮은 도구 허용",
+  hasPopup: true
+}));
+const firstInstalledSection = installedContainer.append(new FakePluginNode("section"));
+firstInstalledSection.append(new FakePluginNode("button", { innerText: "Installed One" }));
+const secondInstalledSection = installedContainer.append(new FakePluginNode("section"));
+secondInstalledSection.append(new FakePluginNode("button", { innerText: "Installed Two" }));
+const unrelatedSection = pluginPage.append(new FakePluginNode("section"));
+unrelatedSection.append(new FakePluginNode("button", { innerText: "Unrelated Action" }));
+pluginPage.querySelectorAll("*").forEach((node, index) => { node.order = index; });
+const originalDocument = context.document;
+context.document = {
+  querySelector: (selector) =>
+    pluginPage.querySelectorAll("*").find((node) => `#${node.id}` === selector) || null,
+  querySelectorAll: (selector) => pluginPage.querySelectorAll(selector)
+};
+assert.deepStrictEqual(
+  [...context.getModernPluginListSections()],
+  [firstInstalledSection, secondInstalledSection],
+  "installed sections must exclude the Pro account's default-permissions menu"
+);
+assert.deepStrictEqual(
+  [...context.getInstalledPluginEntries()].map((entry) => entry.name),
+  ["Installed One", "Installed Two"],
+  "all installed sections are swept without including a later unrelated section"
+);
+const rowWithStatus = (value) => ({
+  lastElementChild: { tagName: "DIV", querySelectorAll: () => [{ textContent: value }] }
+});
+assert.strictEqual(context.classifyModernPluginRow(rowWithStatus("모든 도구 허용")), "tool-permission");
+assert.strictEqual(context.classifyModernPluginRow(rowWithStatus("")), "no-tool-permission");
+assert.strictEqual(context.classifyModernPluginRow({ lastElementChild: null }), "unknown");
+assert.strictEqual(context.shouldFastSkipPluginRow("no-tool-permission", false, true), true);
+assert.strictEqual(context.shouldFastSkipPluginRow("no-tool-permission", true, true), false);
+assert.strictEqual(context.shouldFastSkipPluginRow("no-tool-permission", false, false), false);
+assert.strictEqual(context.shouldFastSkipPluginRow("unknown", false, true), false);
+context.document = originalDocument;
+assert.strictEqual(
+  context.isPluginDetailReady({
+    modernDetail: true,
+    hasNavigation: true,
+    hasInfo: false,
+    hasConnectedAccounts: false,
+    hasAppManagement: false,
+    isDeveloperModeApp: true
+  }),
+  false,
+  "a breadcrumb-only detail shell is not ready"
+);
+assert.strictEqual(
+  context.isPluginDetailReady({
+    modernDetail: true,
+    hasNavigation: true,
+    hasInfo: true,
+    hasConnectedAccounts: true,
+    hasAppManagement: false,
+    isDeveloperModeApp: true
+  }),
+  false,
+  "a developer app must render its management section before classification"
+);
+assert.strictEqual(
+  context.isPluginDetailReady({
+    modernDetail: true,
+    hasNavigation: true,
+    hasInfo: true,
+    hasConnectedAccounts: true,
+    hasAppManagement: true,
+    isDeveloperModeApp: true
+  }),
+  true
+);
+assert.strictEqual(
+  context.isPluginDetailReady({
+    modernDetail: true,
+    hasNavigation: true,
+    hasInfo: true,
+    hasConnectedAccounts: true,
+    hasAppManagement: false,
+    isDeveloperModeApp: false
+  }),
+  true,
+  "a connected non-developer plugin can be classified without app management"
+);
+assert.strictEqual(
+  context.isPluginDetailReady({
+    modernDetail: true,
+    hasNavigation: true,
+    hasInfo: true,
+    hasSkills: true,
+    hasConnectedAccounts: false,
+    hasAppManagement: false,
+    isDeveloperModeApp: false
+  }),
+  true,
+  "a loaded skills-only plugin such as Default templates can be skipped"
+);
+assert.strictEqual(
+  context.isPluginDetailReady({
+    modernDetail: true,
+    hasNavigation: true,
+    hasInfo: true,
+    hasSkills: true,
+    hasConnectedAccounts: false,
+    hasAppManagement: false,
+    isDeveloperModeApp: true
+  }),
+  false,
+  "a developer app still requires its management section"
+);
 assert.strictEqual(listeners.length, 1);
 
 assert.strictEqual(source.includes("async function closePluginSettings()"), true);
 assert.strictEqual(source.includes("const names = buttons.map((button) => getPluginEntryName(button));"), true);
+assert.strictEqual(source.includes('document.querySelector("#installed-plugins-search")'), true);
+assert.strictEqual(source.includes('const PLUGIN_SETTINGS_PATH = "/settings/plugins-settings";'), true);
 assert.strictEqual(source.includes("const entry = await waitForPluginEntry(target);"), true);
 assert.strictEqual(source.includes("timeoutMs = 12000"), true);
 assert.strictEqual(source.includes("목록에서 다시 찾지 못했습니다."), false);
 assert.strictEqual(source.includes("function showPluginRefreshNotice(message, isError = false)"), true);
+assert.strictEqual(vm.runInContext("REFRESH_COMPLETION_TIMEOUT_MS", context), 180000);
+assert.strictEqual(
+  fs.readFileSync("popup.html", "utf8").includes('id="inspectAllPlugins"'),
+  true
+);
+assert.strictEqual(
+  fs.readFileSync("popup.js", "utf8").includes("inspectAll: inspectAllPlugins.checked"),
+  true
+);
 assert.strictEqual(source.split("async function closePluginSettings()", 2)[1].split("function showPluginRefreshNotice", 1)[0].includes('window.location.hash = "";'), true);
 const refreshWorkflow = source
   .split("async function refreshConnectedPlugins({", 2)[1]
@@ -134,4 +360,25 @@ for (const fixedName of ["1. office", "2. hwp", "3. blender", "4. cad", "5. phot
   assert.strictEqual(source.includes(fixedName), false, `Fixed plugin name found: ${fixedName}`);
 }
 
-console.log("Plugin refresh checks OK");
+let timeoutCallback;
+const originalSetTimeout = context.window.setTimeout;
+context.window.setTimeout = (callback) => {
+  timeoutCallback = callback;
+  return 1;
+};
+let completionVisible = false;
+const completion = context.waitForCondition(
+  () => completionVisible,
+  100,
+  "completion was missed"
+);
+completionVisible = true;
+timeoutCallback();
+context.window.setTimeout = originalSetTimeout;
+completion.then(
+  () => console.log("Plugin refresh checks OK"),
+  (error) => {
+    console.error(error);
+    process.exitCode = 1;
+  }
+);

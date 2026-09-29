@@ -4,13 +4,14 @@
 
 [![Validate](https://github.com/JS190-prog/chatgpt-auto-allow-tool/actions/workflows/validate.yml/badge.svg)](https://github.com/JS190-prog/chatgpt-auto-allow-tool/actions/workflows/validate.yml)
 
-A small Chrome extension that automatically clicks Korean or English allow buttons on ChatGPT tool permission cards.
+A Chrome extension that automatically allows ChatGPT tools and can optionally continue after a response completes.
 
 This is an unofficial tool and is not affiliated with OpenAI.
 
 It was built for permission cards like:
 
 - `허용하기`
+- `한 번만 허용`
 - `Allow`
 - `Approve`
 - `승인`
@@ -40,10 +41,23 @@ Click the toolbar icon to quickly toggle automatic approval. For full settings, 
 - `허용할 도구 이름`: comma-separated allow list; leave blank to allow every matching permission card
 - `자동 클릭 제외 키워드`: comma-separated deny list; leave blank to disable keyword blocking
 - `플러그인 자동 새로고침 주기(시간)`: how often the full plugin refresh runs by itself, in hours. Defaults to `0`, which means it only runs when you start it from the popup
+- `자동 이어서 진행 기본값`: default for ChatGPT tabs without a per-tab override; sends the configured prompt after a newly generated response completes. Off by default
+- `자동 입력 문구`: continuation prompt; defaults to `이어서 진행`
+- `자동 이어서 진행 횟수`: maximum automatic sends (1–100) in one chain started by a manual user message
+
+## Automatic Continuation
+
+This opt-in feature reacts only after it observes a new response transition from generating to complete. It does not submit for old responses present when the page opens or for rerenders of an already handled response, and it never overwrites text already in the composer.
+
+Automatically generated follow-up responses stay in the same count. The chain stops at the configured maximum and resets when you manually send a new message. A top-right notice shows the current count after each confirmed automatic send and changes to a completion notice after the last follow-up response finishes.
+
+The option-page checkbox is the default for tabs without an override. The popup's `이 탭 자동 이어서 진행` switch changes only the active ChatGPT tab. Its override survives page reloads in the same tab and is removed when the tab closes. Selecting the same value as the global default clears the override so the tab follows the default again.
 
 ## Automatic Plugin Refresh
 
 ChatGPT only picks up a connector's new tool list after `새로 고침` is clicked on that plugin. This extension runs that whole sweep for you on an interval.
+
+Manual and automatic runs use a faster mode by default: they skip opening entries with no visible tool-permission status. For a manual run, select `권한 표시 없는 앱도 확인 (느림)` in the popup to inspect every installed app. The popup shows elapsed time for the current app, and waits up to three minutes for a slow refresh to finish.
 
 An automatic run starts **only while the ChatGPT tab is in the background**, and stops the moment you switch back to it; the remaining plugins are picked up at the next idle window. The settings dialog never opens in front of you. Multiple ChatGPT tabs share the last-run timestamp, so the sweep runs once.
 

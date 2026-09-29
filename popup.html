@@ -21,6 +21,12 @@
         <input id="enabled" type="checkbox">
       </label>
 
+      <label class="toggle">
+        <span>이 탭 자동 이어서 진행</span>
+        <input id="autoContinueEnabled" type="checkbox" disabled>
+      </label>
+      <p id="autoContinueScope" role="status">현재 탭 확인 중</p>
+
       <dl>
         <div>
           <dt>지연</dt>
@@ -32,6 +38,10 @@
         </div>
       </dl>
 
+      <label class="toggle">
+        <span>권한 표시 없는 앱도 확인 (느림)</span>
+        <input id="inspectAllPlugins" type="checkbox">
+      </label>
       <button id="refreshPlugins" type="button">연결 플러그인 전체 새로고침</button>
       <p id="refreshStatus" role="status" aria-live="polite">대기 중</p>
       <button id="options" type="button">옵션 열기</button>

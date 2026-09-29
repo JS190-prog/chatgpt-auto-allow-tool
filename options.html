@@ -35,6 +35,22 @@
         <input id="autoRefreshHours" type="number" min="0" step="1" placeholder="0이면 자동 새로고침 안 함">
       </label>
 
+      <label class="row">
+        <input id="autoContinueEnabled" type="checkbox">
+        <span>자동 이어서 진행 기본값</span>
+      </label>
+      <p>탭별 설정이 없는 ChatGPT 탭에 적용됩니다. 현재 탭만 바꾸려면 확장프로그램 팝업을 사용하세요.</p>
+
+      <label>
+        자동 입력 문구
+        <input id="autoContinuePrompt" type="text" placeholder="이어서 진행">
+      </label>
+
+      <label>
+        자동 이어서 진행 횟수
+        <input id="autoContinueMaxTurns" type="number" min="1" max="100" step="1">
+      </label>
+
       <p id="status" role="status"></p>
       <button id="save" type="button">저장</button>
     </main>

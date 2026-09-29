@@ -92,3 +92,9 @@ button:disabled {
   margin: 6px 0 8px;
   overflow-wrap: anywhere;
 }
+
+#autoContinueScope {
+  min-height: 19px;
+  margin: -4px 0 8px;
+  overflow-wrap: anywhere;
+}

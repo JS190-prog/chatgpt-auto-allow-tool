@@ -14,6 +14,9 @@ The extension stores only its settings with Chrome extension storage:
 - click delay
 - optional allow-list tool names
 - optional deny-list keywords
+- whether automatic continuation is enabled
+- continuation prompt and maximum continuation count
+- temporary per-tab automatic-continuation overrides, removed when each tab closes
 
 These settings are used only by the extension.
 
