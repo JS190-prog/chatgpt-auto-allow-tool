@@ -133,6 +133,24 @@ for (const options of [
   assert.equal(h.requests.length, 0, `new button must still obey card and policy checks: ${JSON.stringify(options)}`);
   checks += 1;
 }
+for (const label of ["Always allow", "Allow all", "항상 허용", "모든 도구 허용", "Don't allow", "허용하지 않음", "거부하기"]) {
+  const h = harness({ label });
+  h.ctx.scan(); h.flush();
+  assert.equal(h.requests.length, 0, `${label}: broad or negated buttons must never be clicked`);
+  checks += 1;
+}
+{
+  const h = harness({ cardText: `ChatGPT allow ${"긴 대화 본문 ".repeat(300)} Deny` });
+  h.ctx.scan(); h.flush();
+  assert.equal(h.requests.length, 0, "an oversized ancestor must not be treated as a permission card");
+  checks += 1;
+}
+for (const [allowedTools, shouldClick] of [["read", false], ["read_status", true], ["status", false]]) {
+  const h = harness({ allowedTools, cardText: "ChatGPT read_status 사용 허용하기 Allow Deny" });
+  h.ctx.scan(); h.flush();
+  assert.equal(h.requests.length, shouldClick ? 1 : 0, `allowedTools "${allowedTools}" must match whole names only`);
+  checks += 1;
+}
 for (const options of [{ enabled: false }, { allowedTools: "different_tool" }, { deniedKeywords: "read_status" }]) {
   const h = harness(options);
   h.ctx.scan(); h.flush();

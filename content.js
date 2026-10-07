@@ -22,6 +22,12 @@ const ALLOW_TEXT_PATTERNS = [
   /approve/i
 ];
 
+// Buttons that grant more than this single request (or negate the grant) must
+// never be clicked automatically, even though their text contains "allow".
+const BROAD_OR_NEGATED_ALLOW_PATTERN =
+  /always|\ud56d\uc0c1|\ubaa8\ub450|\ubaa8\ub4e0|all\b|don'?t|do\s+not|not\s+allow|never|\ub2e4\uc2dc\s*\ubb3b\uc9c0|\ud5c8\uc6a9\ud558\uc9c0|\uac70\uc808|reject|deny|\ucde8\uc18c|cancel/i;
+const MAX_PERMISSION_CARD_TEXT_LENGTH = 1000;
+
 const PERMISSION_TEXT_PATTERNS = [
   /chatgpt/i,
   /\uc0ac\uc6a9\ud558\ub3c4\ub85d\s*\ud5c8\uc6a9\ud560\uae4c\uc694/i,
@@ -443,12 +449,17 @@ function isAllowButton(button) {
   }
 
   const text = getText(button);
-  return ALLOW_TEXT_PATTERNS.some((pattern) => pattern.test(text));
+  return (
+    !BROAD_OR_NEGATED_ALLOW_PATTERN.test(text) &&
+    ALLOW_TEXT_PATTERNS.some((pattern) => pattern.test(text))
+  );
 }
 
 function looksLikePermissionCard(element) {
   const text = getText(element);
-  if (!text) {
+  // A permission card is small. A long text means an ancestor that swallowed
+  // the conversation, where allow/deny policies would match unrelated text.
+  if (!text || text.length > MAX_PERMISSION_CARD_TEXT_LENGTH) {
     return false;
   }
 
@@ -476,7 +487,23 @@ function passesToolAllowList(cardText) {
   if (allowList.length === 0) {
     return true;
   }
-  return allowList.some((toolName) => cardText.includes(toolName));
+  return allowList.some((toolName) => containsToolName(cardText, toolName));
+}
+
+// Match a tool name as a whole identifier so "read" does not also allow
+// "thread_delete".
+function containsToolName(cardText, toolName) {
+  const isNameChar = (char) => Boolean(char) && /[\p{L}\p{N}_]/u.test(char);
+  let index = cardText.indexOf(toolName);
+  while (index !== -1) {
+    const before = cardText[index - 1];
+    const after = cardText[index + toolName.length];
+    if (!isNameChar(before) && !isNameChar(after)) {
+      return true;
+    }
+    index = cardText.indexOf(toolName, index + 1);
+  }
+  return false;
 }
 
 function passesDenyList(cardText) {
