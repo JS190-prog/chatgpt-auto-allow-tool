@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.10
 
 - Safety: buttons such as "Always allow", "Allow all", `항상 허용`, `모든 … 허용` and negated or reject/cancel labels are never auto-clicked. Permission-card text is capped so an oversized ancestor cannot be mistaken for a card.
 - `허용할 도구 이름` now matches whole tool names (`read` no longer matches `thread_delete` or `read_status`).
