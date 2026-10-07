@@ -13,7 +13,10 @@ class FakeMutationObserver {
 
 const context = {
   chrome: {
-    runtime: { onMessage: { addListener: (listener) => listeners.push(listener) } },
+    runtime: {
+      onMessage: { addListener: (listener) => listeners.push(listener) },
+      sendMessage: async () => ({ ok: true, options: null })
+    },
     storage: {
       onChanged: { addListener() {} },
       local: {
@@ -28,7 +31,7 @@ const context = {
   },
   console,
   Date,
-  document: { documentElement: {}, hidden: true, querySelectorAll: () => [] },
+  document: { documentElement: {}, hidden: true, querySelector: () => null, querySelectorAll: () => [] },
   Element: FakeElement,
   Map,
   MutationObserver: FakeMutationObserver,
@@ -99,37 +102,6 @@ assert.strictEqual(
 assert.strictEqual(context.classifyPluginPage("/settings/general-settings"), "other");
 assert.strictEqual(vm.runInContext('REFRESH_BUTTON_TEXTS.has("도구 새로 고침")', context), true);
 assert.strictEqual(vm.runInContext('REFRESH_BUTTON_TEXTS.has("refresh tools")', context), true);
-class FakeProfileButton extends FakeElement {
-  constructor({ width, disabled = false }) {
-    super();
-    this.innerText = "계정 이니셜";
-    this.disabled = disabled;
-    this.width = width;
-  }
-
-  getAttribute(name) {
-    return name === "aria-label" ? "프로필 메뉴 열기" : null;
-  }
-
-  hasAttribute() {
-    return false;
-  }
-
-  getBoundingClientRect() {
-    return { width: this.width, height: this.width };
-  }
-}
-const hiddenProfileButton = new FakeProfileButton({ width: 0 });
-const loadingProfileButton = new FakeProfileButton({ width: 48, disabled: true });
-const visibleProfileButton = new FakeProfileButton({ width: 48 });
-assert.notStrictEqual(context.getText(visibleProfileButton), "프로필 메뉴 열기");
-assert.strictEqual(
-  context.findProfileMenuButton({
-    querySelectorAll: () => [hiddenProfileButton, loadingProfileButton, visibleProfileButton]
-  }),
-  visibleProfileButton,
-  "the visible enabled profile button is identified by aria-label despite its account text"
-);
 class FakePluginNode extends FakeElement {
   constructor(tagName, { id = "", ownText = "", innerText = "", hasPopup = false } = {}) {
     super();
@@ -191,6 +163,7 @@ const unrelatedSection = pluginPage.append(new FakePluginNode("section"));
 unrelatedSection.append(new FakePluginNode("button", { innerText: "Unrelated Action" }));
 pluginPage.querySelectorAll("*").forEach((node, index) => { node.order = index; });
 const originalDocument = context.document;
+context.window.location.pathname = "/settings/plugins-settings";
 context.document = {
   querySelector: (selector) =>
     pluginPage.querySelectorAll("*").find((node) => `#${node.id}` === selector) || null,
@@ -217,6 +190,7 @@ assert.strictEqual(context.shouldFastSkipPluginRow("no-tool-permission", true, t
 assert.strictEqual(context.shouldFastSkipPluginRow("no-tool-permission", false, false), false);
 assert.strictEqual(context.shouldFastSkipPluginRow("unknown", false, true), false);
 context.document = originalDocument;
+context.window.location.pathname = "/";
 assert.strictEqual(
   context.isPluginDetailReady({
     modernDetail: true,
@@ -300,7 +274,6 @@ assert.strictEqual(source.includes("const entry = await waitForPluginEntry(targe
 assert.strictEqual(source.includes("timeoutMs = 12000"), true);
 assert.strictEqual(source.includes("목록에서 다시 찾지 못했습니다."), false);
 assert.strictEqual(source.includes("function showPluginRefreshNotice(message, isError = false)"), true);
-assert.strictEqual(vm.runInContext("REFRESH_COMPLETION_TIMEOUT_MS", context), 180000);
 assert.strictEqual(
   fs.readFileSync("popup.html", "utf8").includes('id="inspectAllPlugins"'),
   true

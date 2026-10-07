@@ -11,6 +11,11 @@ const fields = {
 
 const status = document.querySelector("#status");
 const saveButton = document.querySelector("#save");
+const diagnosticLog = document.querySelector("#diagnosticLog");
+const diagnosticStatus = document.querySelector("#diagnosticStatus");
+const refreshLogButton = document.querySelector("#refreshLog");
+const copyLogButton = document.querySelector("#copyLog");
+const PLUGIN_REFRESH_LOG_KEY = "pluginRefreshErrorLog";
 
 function fillFields(settings) {
   fields.enabled.checked = settings.enabled;
@@ -56,4 +61,38 @@ function showStatus(message) {
 }
 
 saveButton.addEventListener("click", saveSettings);
+
+async function loadDiagnosticLog() {
+  try {
+    const stored = await chrome.storage.local.get({ [PLUGIN_REFRESH_LOG_KEY]: [] });
+    const logs = Array.isArray(stored[PLUGIN_REFRESH_LOG_KEY]) ? stored[PLUGIN_REFRESH_LOG_KEY] : [];
+    diagnosticLog.value = logs.length ? JSON.stringify(logs.slice().reverse(), null, 2) : "";
+    copyLogButton.disabled = !logs.length;
+    diagnosticStatus.textContent = logs.length ? `오류 로그 ${logs.length}건 · 최신 기록부터 표시합니다.` : "기록된 오류가 없습니다.";
+    return true;
+  } catch (error) {
+    diagnosticLog.value = "";
+    copyLogButton.disabled = true;
+    diagnosticStatus.textContent = `로그 읽기 실패: ${error instanceof Error ? error.message : String(error)}`;
+    return false;
+  }
+}
+
+async function copyDiagnosticLog() {
+  try {
+    await navigator.clipboard.writeText(diagnosticLog.value);
+    diagnosticStatus.textContent = "진단 로그를 복사했습니다.";
+  } catch {
+    diagnosticLog.focus();
+    diagnosticLog.select();
+    diagnosticStatus.textContent = "자동 복사에 실패했습니다. 선택된 로그를 Ctrl+C로 복사하세요.";
+  }
+}
+
+refreshLogButton.addEventListener("click", loadDiagnosticLog);
+copyLogButton.addEventListener("click", copyDiagnosticLog);
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === "local" && PLUGIN_REFRESH_LOG_KEY in changes) loadDiagnosticLog();
+});
 loadSettings();
+loadDiagnosticLog();

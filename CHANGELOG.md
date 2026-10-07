@@ -1,12 +1,44 @@
 # Changelog
 
-## 0.5.10
+## 0.5.15
 
 - Safety: buttons such as "Always allow", "Allow all", `항상 허용`, `모든 … 허용` and negated or reject/cancel labels are never auto-clicked. Permission-card text is capped so an oversized ancestor cannot be mistaken for a card.
 - `허용할 도구 이름` now matches whole tool names (`read` no longer matches `thread_delete` or `read_status`).
 - Shared `settings.js` replaces three copies of the defaults and migration; all stored and typed values are normalized (a 0 ms click delay is honored; out-of-range values are clamped).
 - Page scans triggered by DOM mutations are coalesced (150 ms), and the text check runs before the costlier visibility check.
 - A failed automatic "continue" now shows an error notice instead of failing silently.
+
+## 0.5.14
+
+- Re-arms automatic continuation when ChatGPT reuses the same assistant DOM node for a new response, so multi-turn continuation can continue to the configured limit.
+
+## 0.5.13
+
+- Advances to the next plugin immediately after one refresh-button click, without waiting for start or completion transitions. List and detail navigation checks remain in place.
+- Reports click counts rather than server completion counts and removes the unused completion-timeout option. Click and navigation failures still persist in automation diagnostics.
+- Adds deterministic checks for consecutive plugins with pending refreshes, absent start transitions, disabled controls and failed-click logging. Auto continuation behavior is unchanged.
+
+## 0.5.12
+
+- Recognizes the current ChatGPT response heading and containing turn when author-role attributes are absent, and observes response-completion controls in that turn.
+- Finds the current `보내기` button inside the composer form. Waits for transiently missing composers and send controls, preserves user drafts, and stops stale work on conversation changes or when disabled.
+- Deduplicates responses across DOM replacement, preserves the continuation count through subsequent responses, and exposes progress and errors in the popup.
+- Observes manual form submission so replies completed between scans remain eligible. An unconfirmed send stops the chain until a new manual submission or toggle re-arms it.
+- Persists continuation failures alongside plugin-refresh failures in the options' automation diagnostics, without recording prompts or response content.
+- Adds a current-UI fixture regression covering actual input and button activation, count limits, draft protection, DOM replacement, transient composer absence, visible errors and cancellation.
+
+## 0.5.11
+
+- Makes each plugin's completion deadline configurable from 1–30 minutes (default 10). Shows delayed-response progress after three minutes while waiting for the original request.
+- Checks completion periodically as well as on DOM mutations, aborts if the detail route changes, and counts completion only after the refresh button is enabled again.
+- Persists the latest 100 refresh and settings-navigation errors locally with version, plugin, phase, timing, click count and button state. Options can display and copy logs; conversation content and MCP addresses are excluded.
+- Adds deterministic regressions for slow completion, missed mutations, genuine timeouts, navigation changes, concurrent log writes, persistence and storage failure reporting.
+
+## 0.5.10 (local line, superseded by upstream 0.5.10 — see 0.5.15)
+
+- Opens `/settings/plugins-settings` directly before a refresh sweep, avoiding the unrelated sidebar button also labeled `플러그인`.
+- Carries the request across navigation in per-tab session storage, consumes it once on the settings list, and keeps navigation progress visible in the popup.
+- Rejects installed-list collection on other routes and adds regressions for navigation, resumption, tab isolation, and expired requests.
 
 ## 0.5.9
 
