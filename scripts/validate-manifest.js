@@ -32,6 +32,15 @@ if (manifest.background?.service_worker && !fs.existsSync(manifest.background.se
   throw new Error(`Missing service worker: ${manifest.background.service_worker}`);
 }
 
+for (const page of [manifest.options_page, manifest.action?.default_popup].filter(Boolean)) {
+  const markup = fs.readFileSync(page, "utf8");
+  for (const [, src] of markup.matchAll(/<script[^>]+src="([^"]+)"/g)) {
+    if (!fs.existsSync(src)) {
+      throw new Error(`${page} references missing script: ${src}`);
+    }
+  }
+}
+
 for (const [size, file] of Object.entries(manifest.icons || {})) {
   if (!fs.existsSync(file)) {
     throw new Error(`Missing extension icon ${size}: ${file}`);

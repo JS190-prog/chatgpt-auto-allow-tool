@@ -105,6 +105,7 @@ assert.strictEqual(context.normalizeSettings({ clickDelayMs: 999999 }).clickDela
 assert.strictEqual(context.normalizeSettings({ autoRefreshHours: -1 }).autoRefreshHours, 0);
 assert.strictEqual(context.normalizeSettings({ autoRefreshHours: 99999 }).autoRefreshHours, 720);
 assert.strictEqual(context.normalizeSettings({ autoContinuePrompt: "  " }).autoContinuePrompt, "이어서 진행");
+assert.strictEqual(context.normalizeSettings({ enabled: undefined }).enabled, true, "a removed key falls back to its default");
 assert.deepStrictEqual(plainSettings(context.normalizeSettings()), plainSettings(vm.runInContext("DEFAULT_SETTINGS", context)));
 
 const schedulable = {

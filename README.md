@@ -108,6 +108,7 @@ ZIP 파일은 `dist/` 폴더에 생성됩니다.
 ## 저장소 구성
 
 - `manifest.json`: Chrome 확장프로그램 매니페스트
+- `settings.js`: 기본값·마이그레이션·설정 값 검증(콘텐츠 스크립트, 팝업, 옵션 공용)
 - `content.js`: ChatGPT 권한 카드 감지와 자동 클릭 로직
 - `options.html`, `options.css`, `options.js`: 옵션 페이지
 - `popup.html`, `popup.css`, `popup.js`: 툴바 팝업과 빠른 토글

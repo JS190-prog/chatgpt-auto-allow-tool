@@ -43,7 +43,12 @@ function normalizeAutoContinueMaxTurns(value) {
 // Every consumer funnels stored or typed values through here, so an invalid
 // value (negative, NaN, wrong type) can never reach the automation logic.
 function normalizeSettings(raw = {}) {
-  const merged = { ...DEFAULT_SETTINGS, ...raw };
+  // A removed storage key arrives as `undefined`; it must fall back to the
+  // default rather than overwrite it (Boolean(undefined) would disable the tool).
+  const present = Object.fromEntries(
+    Object.entries(raw).filter(([, value]) => value !== undefined)
+  );
+  const merged = { ...DEFAULT_SETTINGS, ...present };
   return {
     enabled: Boolean(merged.enabled),
     clickDelayMs: normalizeClickDelayMs(merged.clickDelayMs),

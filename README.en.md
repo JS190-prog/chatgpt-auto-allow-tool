@@ -104,6 +104,7 @@ The ZIP is written to `dist/`.
 ## Repository Contents
 
 - `manifest.json`: Chrome extension manifest
+- `settings.js`: shared defaults, migration and value validation (content script, popup, options)
 - `content.js`: ChatGPT permission-card detection and auto-click logic
 - `options.html`, `options.css`, `options.js`: extension options page
 - `popup.html`, `popup.css`, `popup.js`: toolbar popup and quick toggle
