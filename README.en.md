@@ -38,7 +38,7 @@ Click the toolbar icon to quickly toggle automatic approval. For full settings, 
 
 - `자동 허용 사용`: turn automatic clicking on or off
 - `클릭 지연 시간(ms)`: wait time before clicking the allow button
-- `허용할 도구 이름`: comma-separated allow list; leave blank to allow every matching permission card
+- `허용할 도구 이름`: comma-separated allow list; leave blank to allow every matching permission card; names must match a whole tool name, not a substring (`read` does not match `read_status`)
 - `자동 클릭 제외 키워드`: comma-separated deny list; leave blank to disable keyword blocking
 - `플러그인 자동 새로고침 주기(시간)`: how often the full plugin refresh runs by itself, in hours. Defaults to `0`, which means it only runs when you start it from the popup
 - `자동 이어서 진행 기본값`: default for ChatGPT tabs without a per-tab override; sends the configured prompt after a newly generated response completes. Off by default

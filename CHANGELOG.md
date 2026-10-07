@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Safety: buttons such as "Always allow", "Allow all", `항상 허용`, `모든 … 허용` and negated or reject/cancel labels are never auto-clicked. Permission-card text is capped so an oversized ancestor cannot be mistaken for a card.
+- `허용할 도구 이름` now matches whole tool names (`read` no longer matches `thread_delete` or `read_status`).
+- Shared `settings.js` replaces three copies of the defaults and migration; all stored and typed values are normalized (a 0 ms click delay is honored; out-of-range values are clamped).
+- Page scans triggered by DOM mutations are coalesced (150 ms), and the text check runs before the costlier visibility check.
+- A failed automatic "continue" now shows an error notice instead of failing silently.
+
 ## 0.5.9
 
 - Rechecks the current MCP approval button after the click delay, so a button replaced while ChatGPT renders can still receive one click. A disappeared approval is left alone.

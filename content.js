@@ -404,19 +404,27 @@ function scanAutoContinue() {
   }
 
   autoContinueState.timer = window.setTimeout(() => {
-    submitAutoContinuePrompt(latestMessage).catch(() => {});
+    submitAutoContinuePrompt(latestMessage).catch((error) => {
+      showAutoContinueNotice(
+        `자동 이어서 진행 실패 · ${error instanceof Error ? error.message : String(error)}`,
+        true
+      );
+    });
   }, AUTO_CONTINUE_DELAY_MS);
 }
 
 function isAllowButton(button) {
-  if (button.isConnected === false || button.disabled || clickedButtons.has(button) || !isVisible(button)) {
+  if (button.isConnected === false || button.disabled || clickedButtons.has(button)) {
     return false;
   }
 
+  // Test the text before visibility: getComputedStyle/getBoundingClientRect are
+  // far more expensive, and most buttons on the page fail the text test.
   const text = getText(button);
   return (
     !BROAD_OR_NEGATED_ALLOW_PATTERN.test(text) &&
-    ALLOW_TEXT_PATTERNS.some((pattern) => pattern.test(text))
+    ALLOW_TEXT_PATTERNS.some((pattern) => pattern.test(text)) &&
+    isVisible(button)
   );
 }
 
@@ -1296,7 +1304,23 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
 });
 
-const observer = new MutationObserver(() => scan());
+// ChatGPT streams a response as a burst of DOM mutations. Coalesce them so the
+// full-page scan runs at most once per window instead of once per mutation.
+const SCAN_DEBOUNCE_MS = 150;
+let scanScheduled = false;
+
+function scheduleScan() {
+  if (scanScheduled) {
+    return;
+  }
+  scanScheduled = true;
+  window.setTimeout(() => {
+    scanScheduled = false;
+    scan();
+  }, SCAN_DEBOUNCE_MS);
+}
+
+const observer = new MutationObserver(scheduleScan);
 
 loadSettings().then(() => {
   initializeAutoContinue();
