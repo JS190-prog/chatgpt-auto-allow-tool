@@ -2,6 +2,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const vm = require("node:vm");
 
+const settingsSource = fs.readFileSync("settings.js", "utf8");
 const source = fs.readFileSync("content.js", "utf8");
 
 function harness({
@@ -51,6 +52,7 @@ function harness({
     }
   };
   vm.createContext(ctx);
+  vm.runInContext(settingsSource, ctx);
   vm.runInContext(source, ctx);
   vm.runInContext(`settings = ${JSON.stringify({ enabled, allowedTools, deniedKeywords, clickDelayMs: 300 })}`, ctx);
   function onApprovalClick() {

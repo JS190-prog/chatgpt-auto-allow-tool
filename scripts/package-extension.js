@@ -11,6 +11,7 @@ const outFile = path.join(outDir, `chatgpt-auto-allow-tool-${manifest.version}.z
 const files = [
   "manifest.json",
   "background.js",
+  "settings.js",
   "content.js",
   "options.html",
   "options.css",

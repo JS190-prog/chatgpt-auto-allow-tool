@@ -1,16 +1,4 @@
-const DEFAULT_SETTINGS = {
-  enabled: true,
-  clickDelayMs: 300,
-  allowedTools: "",
-  deniedKeywords: "",
-  autoRefreshHours: 0,
-  autoContinueEnabled: false,
-  autoContinuePrompt: "이어서 진행",
-  autoContinueMaxTurns: 1
-};
-
 const OLD_DENY_DEFAULT = "delete,remove,\uc0ad\uc81c,\uc81c\uac70,\ucde8\uc18c,cancel";
-const AUTO_CONTINUE_DEFAULT_MIGRATION_KEY = "autoContinueDefaultOffApplied";
 const ALLOW_ONCE_TEXT_PATTERN = /\ud55c\s*\ubc88\ub9cc\s*\ud5c8\uc6a9/i;
 const ALLOW_TEXT_PATTERNS = [
   ALLOW_ONCE_TEXT_PATTERN,
@@ -36,7 +24,7 @@ const PERMISSION_TEXT_PATTERNS = [
   /use\s+.*\?/i
 ];
 
-let settings = { ...DEFAULT_SETTINGS };
+let settings = normalizeSettings();
 let autoContinueTabOverride = null;
 let pendingClick = null;
 const clickedButtons = new WeakSet();
@@ -84,7 +72,6 @@ const HOUR_MS = 3600000;
 const REFRESH_COMPLETION_TIMEOUT_MS = 180000;
 let autoRefreshLastRunAt = 0;
 const AUTO_CONTINUE_DELAY_MS = 1000;
-const AUTO_CONTINUE_MAX_LIMIT = 100;
 const handledAssistantMessages = new WeakSet();
 const autoContinueState = {
   ready: false,
@@ -129,28 +116,6 @@ function isVisible(element) {
     rect.width > 0 &&
     rect.height > 0
   );
-}
-
-function getAutoContinueDefaultMigration(stored) {
-  if (stored[AUTO_CONTINUE_DEFAULT_MIGRATION_KEY]) {
-    return null;
-  }
-
-  const migration = {
-    [AUTO_CONTINUE_DEFAULT_MIGRATION_KEY]: true
-  };
-  if (stored.autoContinueEnabled !== DEFAULT_SETTINGS.autoContinueEnabled) {
-    migration.autoContinueEnabled = DEFAULT_SETTINGS.autoContinueEnabled;
-  }
-  return migration;
-}
-
-function normalizeAutoContinueMaxTurns(value) {
-  const parsed = Math.trunc(Number(value));
-  if (!Number.isFinite(parsed)) {
-    return DEFAULT_SETTINGS.autoContinueMaxTurns;
-  }
-  return Math.min(AUTO_CONTINUE_MAX_LIMIT, Math.max(1, parsed));
 }
 
 function resolveAutoContinueEnabled(globalEnabled, tabOverride) {
@@ -1249,7 +1214,7 @@ function clickButton(button) {
     }
     clickedButtons.add(currentButton);
     clickOnceLikeUser(currentButton);
-  }, Number(settings.clickDelayMs) || DEFAULT_SETTINGS.clickDelayMs);
+  }, normalizeClickDelayMs(settings.clickDelayMs));
 }
 
 function findEligibleAllowButton() {
@@ -1265,18 +1230,8 @@ function scan() {
 }
 
 async function loadSettings() {
-  const stored = await chrome.storage.sync.get({
-    ...DEFAULT_SETTINGS,
-    [AUTO_CONTINUE_DEFAULT_MIGRATION_KEY]: false
-  });
-
-  const migration = getAutoContinueDefaultMigration(stored);
-  if (migration) {
-    await chrome.storage.sync.set(migration);
-    Object.assign(stored, migration);
-  }
-
-  settings = { ...DEFAULT_SETTINGS, ...stored };
+  const stored = await loadStoredSettings();
+  settings = normalizeSettings(stored);
 
   if (settings.deniedKeywords === OLD_DENY_DEFAULT) {
     settings.deniedKeywords = "";
@@ -1300,19 +1255,16 @@ chrome.storage.onChanged.addListener((changes, area) => {
     return;
   }
   const previousAutoContinueEnabled = isAutoContinueEnabled();
+  const updated = { ...settings };
   for (const [key, change] of Object.entries(changes)) {
-    settings[key] = change.newValue;
+    updated[key] = change.newValue;
   }
+  settings = normalizeSettings(updated);
   if (
     (changes.enabled && !changes.enabled.newValue) ||
     (previousAutoContinueEnabled && !isAutoContinueEnabled())
   ) {
     resetAutoContinueTracking();
-  }
-  if (changes.autoContinueMaxTurns) {
-    settings.autoContinueMaxTurns = normalizeAutoContinueMaxTurns(
-      changes.autoContinueMaxTurns.newValue
-    );
   }
   scan();
 });
@@ -1347,9 +1299,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 const observer = new MutationObserver(() => scan());
 
 loadSettings().then(() => {
-  settings.autoContinueMaxTurns = normalizeAutoContinueMaxTurns(
-    settings.autoContinueMaxTurns
-  );
   initializeAutoContinue();
   scan();
   // ponytail: the automatic run rides the existing scan interval, so it needs an

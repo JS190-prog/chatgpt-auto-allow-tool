@@ -17,7 +17,7 @@
 
       <label>
         클릭 지연 시간(ms)
-        <input id="clickDelayMs" type="number" min="0" step="50">
+        <input id="clickDelayMs" type="number" min="0" max="10000" step="50">
       </label>
 
       <label>
@@ -32,7 +32,7 @@
 
       <label>
         플러그인 자동 새로고침 주기(시간)
-        <input id="autoRefreshHours" type="number" min="0" step="1" placeholder="0이면 자동 새로고침 안 함">
+        <input id="autoRefreshHours" type="number" min="0" max="720" step="1" placeholder="0이면 자동 새로고침 안 함">
       </label>
 
       <label class="row">
@@ -55,6 +55,7 @@
       <button id="save" type="button">저장</button>
     </main>
 
+    <script src="settings.js"></script>
     <script src="options.js"></script>
   </body>
 </html>

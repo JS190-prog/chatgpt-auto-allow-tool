@@ -2,6 +2,7 @@ const assert = require("assert");
 const fs = require("fs");
 const vm = require("vm");
 
+const settingsSource = fs.readFileSync("settings.js", "utf8");
 const source = fs.readFileSync("content.js", "utf8");
 const listeners = [];
 class FakeElement {}
@@ -45,6 +46,7 @@ const context = {
 };
 
 vm.createContext(context);
+vm.runInContext(settingsSource, context);
 vm.runInContext(source, context);
 
 assert.deepStrictEqual(

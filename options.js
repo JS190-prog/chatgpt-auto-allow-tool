@@ -1,15 +1,3 @@
-const DEFAULT_SETTINGS = {
-  enabled: true,
-  clickDelayMs: 300,
-  allowedTools: "",
-  deniedKeywords: "",
-  autoRefreshHours: 0,
-  autoContinueEnabled: false,
-  autoContinuePrompt: "이어서 진행",
-  autoContinueMaxTurns: 1
-};
-const AUTO_CONTINUE_DEFAULT_MIGRATION_KEY = "autoContinueDefaultOffApplied";
-
 const fields = {
   enabled: document.querySelector("#enabled"),
   clickDelayMs: document.querySelector("#clickDelayMs"),
@@ -24,59 +12,47 @@ const fields = {
 const status = document.querySelector("#status");
 const saveButton = document.querySelector("#save");
 
-function getAutoContinueDefaultMigration(settings) {
-  if (settings[AUTO_CONTINUE_DEFAULT_MIGRATION_KEY]) {
-    return null;
-  }
-
-  const migration = {
-    [AUTO_CONTINUE_DEFAULT_MIGRATION_KEY]: true
-  };
-  if (settings.autoContinueEnabled !== DEFAULT_SETTINGS.autoContinueEnabled) {
-    migration.autoContinueEnabled = DEFAULT_SETTINGS.autoContinueEnabled;
-  }
-  return migration;
-}
-
-async function loadSettings() {
-  const settings = await chrome.storage.sync.get({
-    ...DEFAULT_SETTINGS,
-    [AUTO_CONTINUE_DEFAULT_MIGRATION_KEY]: false
-  });
-  const migration = getAutoContinueDefaultMigration(settings);
-  if (migration) {
-    await chrome.storage.sync.set(migration);
-    Object.assign(settings, migration);
-  }
-
-  fields.enabled.checked = Boolean(settings.enabled);
+function fillFields(settings) {
+  fields.enabled.checked = settings.enabled;
   fields.clickDelayMs.value = settings.clickDelayMs;
   fields.allowedTools.value = settings.allowedTools;
   fields.deniedKeywords.value = settings.deniedKeywords;
   fields.autoRefreshHours.value = settings.autoRefreshHours;
-  fields.autoContinueEnabled.checked = Boolean(settings.autoContinueEnabled);
+  fields.autoContinueEnabled.checked = settings.autoContinueEnabled;
   fields.autoContinuePrompt.value = settings.autoContinuePrompt;
   fields.autoContinueMaxTurns.value = settings.autoContinueMaxTurns;
 }
 
+async function loadSettings() {
+  fillFields(normalizeSettings(await loadStoredSettings()));
+}
+
 async function saveSettings() {
-  await chrome.storage.sync.set({
+  const settings = normalizeSettings({
     enabled: fields.enabled.checked,
-    clickDelayMs: Math.max(0, Number(fields.clickDelayMs.value) || 0),
+    clickDelayMs: fields.clickDelayMs.value,
     allowedTools: fields.allowedTools.value,
     deniedKeywords: fields.deniedKeywords.value,
-    autoRefreshHours: Math.max(0, Number(fields.autoRefreshHours.value) || 0),
+    autoRefreshHours: fields.autoRefreshHours.value,
     autoContinueEnabled: fields.autoContinueEnabled.checked,
-    autoContinuePrompt: fields.autoContinuePrompt.value.trim() || DEFAULT_SETTINGS.autoContinuePrompt,
-    autoContinueMaxTurns: Math.min(
-      100,
-      Math.max(1, Math.trunc(Number(fields.autoContinueMaxTurns.value) || 1))
-    )
+    autoContinuePrompt: fields.autoContinuePrompt.value,
+    autoContinueMaxTurns: fields.autoContinueMaxTurns.value
   });
-  status.textContent = "저장되었습니다.";
+  try {
+    await chrome.storage.sync.set(settings);
+    // Show the values that were actually stored (clamped or defaulted).
+    fillFields(settings);
+    showStatus("저장되었습니다.");
+  } catch (error) {
+    showStatus(`저장하지 못했습니다: ${error instanceof Error ? error.message : error}`);
+  }
+}
+
+function showStatus(message) {
+  status.textContent = message;
   window.setTimeout(() => {
     status.textContent = "";
-  }, 1500);
+  }, 3000);
 }
 
 saveButton.addEventListener("click", saveSettings);

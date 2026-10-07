@@ -1,13 +1,3 @@
-const DEFAULT_SETTINGS = {
-  enabled: true,
-  clickDelayMs: 300,
-  allowedTools: "",
-  deniedKeywords: "",
-  autoContinueEnabled: false,
-  autoContinueMaxTurns: 1
-};
-const AUTO_CONTINUE_DEFAULT_MIGRATION_KEY = "autoContinueDefaultOffApplied";
-
 const enabled = document.querySelector("#enabled");
 const autoContinueEnabled = document.querySelector("#autoContinueEnabled");
 const autoContinueScope = document.querySelector("#autoContinueScope");
@@ -20,20 +10,6 @@ const inspectAllPlugins = document.querySelector("#inspectAllPlugins");
 const refreshStatus = document.querySelector("#refreshStatus");
 let refreshStateTimer = null;
 
-function getAutoContinueDefaultMigration(settings) {
-  if (settings[AUTO_CONTINUE_DEFAULT_MIGRATION_KEY]) {
-    return null;
-  }
-
-  const migration = {
-    [AUTO_CONTINUE_DEFAULT_MIGRATION_KEY]: true
-  };
-  if (settings.autoContinueEnabled !== DEFAULT_SETTINGS.autoContinueEnabled) {
-    migration.autoContinueEnabled = DEFAULT_SETTINGS.autoContinueEnabled;
-  }
-  return migration;
-}
-
 function render(settings) {
   enabled.checked = Boolean(settings.enabled);
   stateText.textContent = settings.enabled ? "자동 허용 켜짐" : "자동 허용 꺼짐";
@@ -42,22 +18,12 @@ function render(settings) {
 }
 
 async function loadSettings() {
-  const settings = await chrome.storage.sync.get({
-    ...DEFAULT_SETTINGS,
-    [AUTO_CONTINUE_DEFAULT_MIGRATION_KEY]: false
-  });
-  const migration = getAutoContinueDefaultMigration(settings);
-  if (migration) {
-    await chrome.storage.sync.set(migration);
-    Object.assign(settings, migration);
-  }
-  render(settings);
+  render(normalizeSettings(await loadStoredSettings()));
 }
 
 enabled.addEventListener("change", async () => {
   await chrome.storage.sync.set({ enabled: enabled.checked });
-  const settings = await chrome.storage.sync.get(DEFAULT_SETTINGS);
-  render(settings);
+  render(normalizeSettings(await chrome.storage.sync.get(DEFAULT_SETTINGS)));
 });
 
 autoContinueEnabled.addEventListener("change", async () => {

@@ -2,6 +2,7 @@ const assert = require("assert");
 const fs = require("fs");
 const vm = require("vm");
 
+const settingsSource = fs.readFileSync("settings.js", "utf8");
 const source = fs.readFileSync("content.js", "utf8");
 const backgroundSource = fs.readFileSync("background.js", "utf8");
 const optionsSource = fs.readFileSync("options.js", "utf8");
@@ -50,6 +51,7 @@ const context = {
 };
 
 vm.createContext(context);
+vm.runInContext(settingsSource, context);
 vm.runInContext(source, context);
 
 assert.strictEqual(context.normalizeAutoContinueMaxTurns(undefined), 1);
@@ -83,15 +85,27 @@ assert.strictEqual(
   null,
   "the default migration runs only once"
 );
-assert.ok(source.includes('const AUTO_CONTINUE_DEFAULT_MIGRATION_KEY = "autoContinueDefaultOffApplied"'));
-assert.ok(optionsSource.includes('const AUTO_CONTINUE_DEFAULT_MIGRATION_KEY = "autoContinueDefaultOffApplied"'));
-assert.ok(popupSource.includes('const AUTO_CONTINUE_DEFAULT_MIGRATION_KEY = "autoContinueDefaultOffApplied"'));
-assert.ok(source.includes("autoContinueEnabled: false"));
-assert.ok(optionsSource.includes("autoContinueEnabled: false"));
-assert.ok(popupSource.includes("autoContinueEnabled: false"));
-assert.ok(source.includes("migration.autoContinueEnabled = DEFAULT_SETTINGS.autoContinueEnabled"));
-assert.ok(optionsSource.includes("migration.autoContinueEnabled = DEFAULT_SETTINGS.autoContinueEnabled"));
-assert.ok(popupSource.includes("migration.autoContinueEnabled = DEFAULT_SETTINGS.autoContinueEnabled"));
+assert.ok(settingsSource.includes('const AUTO_CONTINUE_DEFAULT_MIGRATION_KEY = "autoContinueDefaultOffApplied"'));
+assert.ok(settingsSource.includes("autoContinueEnabled: false"));
+assert.ok(settingsSource.includes("migration.autoContinueEnabled = DEFAULT_SETTINGS.autoContinueEnabled"));
+for (const [name, text] of [["content.js", source], ["options.js", optionsSource], ["popup.js", popupSource]]) {
+  assert.ok(!text.includes("const DEFAULT_SETTINGS"), `${name} must use the shared settings.js defaults`);
+  assert.ok(!text.includes("function getAutoContinueDefaultMigration"), `${name} must not duplicate the migration`);
+}
+assert.deepStrictEqual(manifest.content_scripts[0].js, ["settings.js", "content.js"]);
+assert.ok(optionsMarkup.indexOf("settings.js") < optionsMarkup.indexOf("options.js"));
+assert.ok(popupMarkup.indexOf("settings.js") < popupMarkup.indexOf("popup.js"));
+assert.ok(fs.readFileSync("scripts/package-extension.js", "utf8").includes('"settings.js"'));
+
+const plainSettings = (value) => JSON.parse(JSON.stringify(value));
+assert.strictEqual(context.normalizeSettings({ clickDelayMs: 0 }).clickDelayMs, 0, "0ms is a valid delay");
+assert.strictEqual(context.normalizeSettings({ clickDelayMs: -5 }).clickDelayMs, 0);
+assert.strictEqual(context.normalizeSettings({ clickDelayMs: "abc" }).clickDelayMs, 300);
+assert.strictEqual(context.normalizeSettings({ clickDelayMs: 999999 }).clickDelayMs, 10000);
+assert.strictEqual(context.normalizeSettings({ autoRefreshHours: -1 }).autoRefreshHours, 0);
+assert.strictEqual(context.normalizeSettings({ autoRefreshHours: 99999 }).autoRefreshHours, 720);
+assert.strictEqual(context.normalizeSettings({ autoContinuePrompt: "  " }).autoContinuePrompt, "이어서 진행");
+assert.deepStrictEqual(plainSettings(context.normalizeSettings()), plainSettings(vm.runInContext("DEFAULT_SETTINGS", context)));
 
 const schedulable = {
   enabled: true,
@@ -143,7 +157,7 @@ assert.ok(
 );
 assert.ok(optionsMarkup.includes('id="autoContinueMaxTurns"'));
 assert.ok(optionsMarkup.includes('min="1" max="100"'));
-assert.ok(optionsSource.includes("autoContinuePrompt: fields.autoContinuePrompt.value.trim()"));
+assert.ok(optionsSource.includes("normalizeSettings({"));
 assert.ok(popupMarkup.includes('id="autoContinueEnabled"'));
 assert.ok(popupMarkup.includes("이 탭 자동 이어서 진행"));
 assert.ok(popupSource.includes('sendToActiveTab("set-tab-auto-continue-enabled"'));
