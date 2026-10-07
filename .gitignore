@@ -1,3 +1,5 @@
 mcp-shell.log
 node_modules/
 dist/
+.localcode/
+local_artifacts/

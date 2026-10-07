@@ -37,9 +37,6 @@ const REFRESH_BUTTON_TEXTS = new Set([
 ]);
 const BACK_BUTTON_TEXTS = new Set(["이전", "back"]);
 const PLUGIN_BREADCRUMB_TEXTS = new Set(["플러그인", "plugins"]);
-const PROFILE_MENU_TEXTS = new Set(["프로필 메뉴 열기", "open profile menu"]);
-const SETTINGS_MENU_ITEM_TEXTS = new Set(["설정", "settings"]);
-const PLUGIN_SETTINGS_NAV_TEXTS = new Set(["플러그인", "plugins"]);
 const APP_MANAGEMENT_TEXTS = new Set(["앱 관리", "app management"]);
 const CONNECTED_ACCOUNT_TEXTS = new Set(["연결된 계정", "connected accounts"]);
 const DEV_MODE_VERSION_TEXTS = new Set(["dev mode"]);
@@ -60,26 +57,43 @@ const DETAIL_SKILLS_TEXTS = new Set(["스킬", "skills"]);
 const pluginRefreshState = {
   status: "idle",
   total: 0,
-  completed: 0,
+  clicked: 0,
   skipped: 0,
   current: "",
   currentStartedAt: 0,
-  error: ""
+  runStartedAt: 0,
+  auto: false,
+  phase: "idle",
+  clickCount: 0,
+  error: "",
+  logError: ""
 };
 let pluginRefreshPromise = null;
 const AUTO_REFRESH_LAST_RUN_KEY = "autoPluginRefreshAt";
 const HOUR_MS = 3600000;
-const REFRESH_COMPLETION_TIMEOUT_MS = 180000;
 let autoRefreshLastRunAt = 0;
 const AUTO_CONTINUE_DELAY_MS = 1000;
 const handledAssistantMessages = new WeakSet();
+const handledAssistantMessageKeys = new Set();
+const modernAssistantMessages = new WeakSet();
+const ASSISTANT_HEADING_TEXTS = new Set(["chatgpt 답변:", "chatgpt said:"]);
+const RESPONSE_COMPLETE_LABELS = new Set(["응답 다시 생성", "응답 평가", "regenerate response", "rate response"]);
 const autoContinueState = {
   ready: false,
   observedGeneration: false,
   awaitingAutoResponse: false,
   sentCount: 0,
   timer: null,
-  sending: false
+  sending: false,
+  route: "",
+  epoch: 0,
+  status: "idle",
+  phase: "idle",
+  reason: "",
+  error: "",
+  logError: "",
+  startedAt: 0,
+  clickCount: 0
 };
 
 function normalize(text) {
@@ -138,7 +152,14 @@ function snapshotAutoContinueTabState() {
   return {
     globalEnabled: Boolean(settings.autoContinueEnabled),
     tabOverride: autoContinueTabOverride,
-    effectiveEnabled: isAutoContinueEnabled()
+    effectiveEnabled: isAutoContinueEnabled(),
+    status: settings.enabled && isAutoContinueEnabled() ? autoContinueState.status : "off",
+    phase: autoContinueState.phase,
+    reason: autoContinueState.reason,
+    sentCount: autoContinueState.sentCount,
+    maxTurns: normalizeAutoContinueMaxTurns(settings.autoContinueMaxTurns),
+    error: autoContinueState.error,
+    logError: autoContinueState.logError
   };
 }
 
@@ -175,24 +196,68 @@ async function setAutoContinueForThisTab(requestedEnabled) {
   const nextEffective = isAutoContinueEnabled();
   if (previousEffective && !nextEffective) {
     resetAutoContinueTracking();
+  } else if (!previousEffective && nextEffective) {
+    initializeAutoContinue();
   }
   scan();
   return snapshotAutoContinueTabState();
 }
 
 function getAssistantMessages() {
-  return [...document.querySelectorAll('[data-message-author-role="assistant"]')];
+  const messages = [];
+  const seen = new Set();
+  for (const node of document.querySelectorAll('[data-message-author-role="assistant"], h4.sr-only')) {
+    let message = node;
+    if (node.getAttribute("data-message-author-role") !== "assistant") {
+      if (!ASSISTANT_HEADING_TEXTS.has(normalize(node.textContent))) continue;
+      if (node.closest('[data-message-author-role="assistant"]')) continue;
+      message = node.closest(".group") || node.parentElement;
+      if (!message) continue;
+      modernAssistantMessages.add(message);
+    }
+    if (!seen.has(message)) { seen.add(message); messages.push(message); }
+  }
+  return messages;
 }
 
 function getLatestAssistantMessage() {
   return getAssistantMessages().at(-1) || null;
 }
 
+function getAssistantMessageKey(message) {
+  if (!message) return null;
+  const id = message.getAttribute("data-message-id");
+  const index = getAssistantMessages().indexOf(message);
+  if (index < 0) return null;
+  return `${window.location.pathname || "/"}:assistant:${id || index}`;
+}
+
+function isAssistantMessageHandled(message, key = getAssistantMessageKey(message)) {
+  return handledAssistantMessages.has(message) || Boolean(key && handledAssistantMessageKeys.has(key));
+}
+
+function markAssistantMessageHandled(message, key = getAssistantMessageKey(message)) {
+  if (message) handledAssistantMessages.add(message);
+  if (key) handledAssistantMessageKeys.add(key);
+}
+
+function unmarkAssistantMessageHandled(message, key = getAssistantMessageKey(message)) {
+  if (message) handledAssistantMessages.delete(message);
+  if (key) handledAssistantMessageKeys.delete(key);
+}
+
 function isResponseGenerating() {
   const stopButtons = document.querySelectorAll(
     'button[data-testid="stop-button"], button[aria-label*="응답 중지"], button[aria-label*="Stop response"]'
   );
-  return [...stopButtons].some(isVisible);
+  if ([...stopButtons].some(isVisible)) return true;
+  const latestMessage = getLatestAssistantMessage();
+  if (!latestMessage || !modernAssistantMessages.has(latestMessage)) return false;
+  // The current UI has no author-role attribute. Its response actions appear
+  // on the containing turn only after the assistant finishes.
+  return ![...latestMessage.querySelectorAll("button")].some(button =>
+    RESPONSE_COMPLETE_LABELS.has(normalize(button.getAttribute("aria-label"))) && isVisible(button)
+  );
 }
 
 function findPromptComposer() {
@@ -236,7 +301,7 @@ function setComposerText(composer, text) {
 function findSendButton(composer) {
   const form = composer?.closest?.("form") || document;
   return [...form.querySelectorAll(
-    'button[data-testid="send-button"], button[aria-label*="프롬프트 보내기"], button[aria-label*="Send prompt"]'
+    'button[data-testid="send-button"], button[aria-label*="프롬프트 보내기"], button[aria-label*="Send prompt"], button[aria-label="보내기"], button[aria-label="Send"]'
   )].find((button) => isVisible(button) && !isControlDisabled(button)) || null;
 }
 
@@ -275,7 +340,7 @@ function markExistingAssistantMessagesHandled({ keepLatest = false } = {}) {
   const lastIndex = messages.length - 1;
   messages.forEach((message, index) => {
     if (!keepLatest || index !== lastIndex) {
-      handledAssistantMessages.add(message);
+      markAssistantMessageHandled(message);
     }
   });
 }
@@ -284,61 +349,161 @@ function resetAutoContinueTracking() {
   cancelPendingAutoContinue();
   markExistingAssistantMessagesHandled();
   Object.assign(autoContinueState, {
+    epoch: autoContinueState.epoch + 1,
     observedGeneration: false,
     awaitingAutoResponse: false,
     sentCount: 0,
-    sending: false
+    sending: false,
+    status: "off",
+    reason: "",
+    error: "",
+    logError: ""
   });
 }
 
 function initializeAutoContinue() {
+  if (!findPromptComposer()) {
+    autoContinueState.ready = false;
+    return;
+  }
   const generating = isResponseGenerating();
+  if (generating) {
+    const latest = getLatestAssistantMessage();
+    if (latest) {
+      handledAssistantMessages.delete(latest);
+      handledAssistantMessageKeys.delete(getAssistantMessageKey(latest));
+    }
+  }
   markExistingAssistantMessagesHandled({ keepLatest: generating });
   autoContinueState.observedGeneration = generating;
   autoContinueState.ready = true;
+  autoContinueState.route = window.location.pathname || "/";
+  autoContinueState.status = generating ? "waiting-response" : "watching";
 }
 
-async function submitAutoContinuePrompt(message) {
+function observeManualPromptSubmission(event) {
+  if (!settings.enabled || !isAutoContinueEnabled() || pluginRefreshPromise || autoContinueState.sending) return;
+  const composer = findPromptComposer();
+  if (!composer || event.target !== composer.closest("form") || !getComposerText(composer)) return;
+  resetAutoContinueTracking();
+  autoContinueState.ready = true;
+  autoContinueState.route = window.location.pathname || "/";
+  autoContinueState.observedGeneration = true;
+  autoContinueState.status = "waiting-response";
+}
+
+function assertAutoContinueContext(trigger) {
+  if (!settings.enabled || !isAutoContinueEnabled() || pluginRefreshPromise || trigger.epoch !== autoContinueState.epoch) {
+    const error = new Error("자동 이어서 진행을 중지했습니다.");
+    error.code = "auto-continue-cancelled";
+    throw error;
+  }
+  if ((window.location.pathname || "/") !== trigger.route ||
+      getAssistantMessageKey(getLatestAssistantMessage()) !== trigger.messageKey) {
+    const error = new Error("자동 이어서 진행 대기 중 대화 또는 최신 응답이 변경됐습니다.");
+    error.code = "auto-continue-context-changed";
+    throw error;
+  }
+  if (isResponseGenerating()) {
+    const error = new Error("새 응답이 생성 중이어서 자동 입력을 중지했습니다.");
+    error.code = "auto-continue-cancelled";
+    throw error;
+  }
+}
+
+async function reportAutoContinueError(error) {
+  autoContinueState.status = "error";
+  autoContinueState.error = error instanceof Error ? error.message : String(error);
+  try {
+    const result = await chrome.runtime.sendMessage({
+      type: "record-auto-continue-error",
+      entry: {
+        phase: autoContinueState.phase,
+        code: error?.code || "auto-continue-error",
+        message: autoContinueState.error,
+        elapsedMs: autoContinueState.startedAt ? Math.max(0, Date.now() - autoContinueState.startedAt) : 0,
+        clickCount: autoContinueState.clickCount,
+        sentCount: autoContinueState.sentCount,
+        maxTurns: normalizeAutoContinueMaxTurns(settings.autoContinueMaxTurns),
+        route: "conversation"
+      }
+    });
+    if (!result?.ok) throw new Error(result?.error || "로그 저장 응답을 받지 못했습니다.");
+  } catch (logError) {
+    autoContinueState.logError = logError instanceof Error ? logError.message : String(logError);
+    console.error("Auto continuation diagnostic log could not be saved", logError);
+  }
+  const logStatus = autoContinueState.logError ? "진단 로그 저장 실패" : "옵션에서 진단 로그 확인";
+  showAutoContinueNotice(`자동 이어서 진행 중단 · ${autoContinueState.error} · ${logStatus}`, true);
+}
+
+async function submitAutoContinuePrompt(message, trigger) {
   autoContinueState.timer = null;
 
   if (
     !settings.enabled ||
     !isAutoContinueEnabled() ||
     isResponseGenerating() ||
-    handledAssistantMessages.has(message)
+    isAssistantMessageHandled(message, trigger.messageKey)
   ) {
     return;
   }
 
-  handledAssistantMessages.add(message);
-  const composer = findPromptComposer();
-  const prompt = String(settings.autoContinuePrompt || "").trim();
-  if (!composer || !prompt || getComposerText(composer)) {
-    return;
-  }
-
+  const prompt = String(settings.autoContinuePrompt || DEFAULT_SETTINGS.autoContinuePrompt).trim();
+  let composer;
+  let confirmed = false;
   autoContinueState.sending = true;
+  autoContinueState.startedAt = Date.now();
+  autoContinueState.clickCount = 0;
+  autoContinueState.error = "";
+  autoContinueState.logError = "";
   try {
+    autoContinueState.phase = "wait-composer";
+    autoContinueState.status = "waiting-composer";
+    composer = await waitForCondition(() => {
+      assertAutoContinueContext(trigger);
+      const current = findPromptComposer();
+      return current && isVisible(current) && current;
+    }, 5000, "자동 이어서 진행 입력창을 찾지 못했습니다.", 100);
+    markAssistantMessageHandled(message, trigger.messageKey);
+    if (getComposerText(composer)) {
+      autoContinueState.status = "skipped";
+      autoContinueState.reason = "입력 중인 문구가 있어 자동 입력을 건너뛰었습니다.";
+      return;
+    }
+    autoContinueState.phase = "write-prompt";
+    autoContinueState.status = "sending";
     setComposerText(composer, prompt);
+    autoContinueState.phase = "wait-send-button";
     const sendButton = await waitForCondition(
-      () => findSendButton(composer),
+      () => { assertAutoContinueContext(trigger); return findSendButton(composer); },
       5000,
-      "자동 이어서 진행 전송 버튼을 찾지 못했습니다."
+      "자동 이어서 진행 전송 버튼을 찾지 못했습니다.",
+      100
     );
 
-    if (!settings.enabled || !isAutoContinueEnabled() || isResponseGenerating()) {
+    assertAutoContinueContext(trigger);
+    if (findPromptComposer() !== composer || getComposerText(composer) !== prompt) {
+      autoContinueState.status = "skipped";
+      autoContinueState.reason = "입력창이 변경되어 자동 전송을 건너뛰었습니다.";
       return;
     }
 
     autoContinueState.awaitingAutoResponse = true;
+    autoContinueState.observedGeneration = true;
+    autoContinueState.phase = "confirm-send";
     try {
+      autoContinueState.clickCount = 1;
       clickOnceLikeUser(sendButton);
       await waitForCondition(
         () => isResponseGenerating() || !getComposerText(composer),
         5000,
-        "자동 이어서 진행 전송을 확인하지 못했습니다."
+        "자동 이어서 진행 전송을 확인하지 못했습니다.",
+        100
       );
+      confirmed = true;
       autoContinueState.sentCount += 1;
+      autoContinueState.status = "waiting-response";
       showAutoContinueNotice(
         `자동 이어서 진행 · ${autoContinueState.sentCount}/${normalizeAutoContinueMaxTurns(settings.autoContinueMaxTurns)}회 전송`
       );
@@ -346,31 +511,62 @@ async function submitAutoContinuePrompt(message) {
       autoContinueState.awaitingAutoResponse = false;
       throw error;
     }
+  } catch (error) {
+    markAssistantMessageHandled(message, trigger.messageKey);
+    if (error?.code === "auto-continue-cancelled") {
+      autoContinueState.status = "off";
+      autoContinueState.reason = error.message;
+    } else {
+      await reportAutoContinueError(error);
+    }
   } finally {
+    if (!confirmed && composer && findPromptComposer() === composer &&
+        (window.location.pathname || "/") === trigger.route && getComposerText(composer) === prompt) {
+      setComposerText(composer, "");
+    }
     autoContinueState.sending = false;
   }
 }
 
 function scanAutoContinue() {
   if (!autoContinueState.ready) {
+    initializeAutoContinue();
+    if (!autoContinueState.ready) return;
+  }
+  if (autoContinueState.route !== (window.location.pathname || "/")) {
+    resetAutoContinueTracking();
+    initializeAutoContinue();
+    return;
+  }
+  if (autoContinueState.status === "error") {
+    cancelPendingAutoContinue();
     return;
   }
 
   if (!settings.enabled || !isAutoContinueEnabled() || pluginRefreshPromise) {
     cancelPendingAutoContinue();
+    markExistingAssistantMessagesHandled({ keepLatest: isResponseGenerating() });
     return;
   }
 
   if (isResponseGenerating()) {
     cancelPendingAutoContinue();
+    const latestMessage = getLatestAssistantMessage();
+    if (latestMessage && (autoContinueState.observedGeneration || autoContinueState.awaitingAutoResponse)) {
+      // ChatGPT may reuse the previous assistant node for this response.
+      unmarkAssistantMessageHandled(latestMessage);
+    }
     if (!autoContinueState.observedGeneration && !autoContinueState.awaitingAutoResponse) {
       autoContinueState.sentCount = 0;
     }
     autoContinueState.observedGeneration = true;
+    autoContinueState.status = "waiting-response";
     return;
   }
 
   const latestMessage = getLatestAssistantMessage();
+  if (autoContinueState.observedGeneration && (!latestMessage || isAssistantMessageHandled(latestMessage))) return;
+  if (autoContinueState.timer || autoContinueState.sending) return;
   const shouldSchedule = shouldScheduleAutoContinue({
     enabled: settings.enabled,
     autoContinueEnabled: isAutoContinueEnabled(),
@@ -380,7 +576,7 @@ function scanAutoContinue() {
     sentCount: autoContinueState.sentCount,
     maxTurns: settings.autoContinueMaxTurns,
     hasMessage: Boolean(latestMessage),
-    handled: latestMessage ? handledAssistantMessages.has(latestMessage) : false
+    handled: latestMessage ? isAssistantMessageHandled(latestMessage) : false
   });
 
   if (!autoContinueState.observedGeneration) {
@@ -392,10 +588,11 @@ function scanAutoContinue() {
 
   if (!shouldSchedule) {
     if (latestMessage) {
-      handledAssistantMessages.add(latestMessage);
+      markAssistantMessageHandled(latestMessage);
     }
     const maxTurns = normalizeAutoContinueMaxTurns(settings.autoContinueMaxTurns);
     if (autoContinueState.sentCount >= maxTurns) {
+      autoContinueState.status = "done";
       showAutoContinueNotice(
         `자동 이어서 진행 완료 · ${autoContinueState.sentCount}/${maxTurns}회`
       );
@@ -403,13 +600,15 @@ function scanAutoContinue() {
     return;
   }
 
+  const trigger = {
+    messageKey: getAssistantMessageKey(latestMessage),
+    route: window.location.pathname || "/",
+    epoch: autoContinueState.epoch
+  };
+  autoContinueState.status = "scheduled";
+  autoContinueState.phase = "scheduled";
   autoContinueState.timer = window.setTimeout(() => {
-    submitAutoContinuePrompt(latestMessage).catch((error) => {
-      showAutoContinueNotice(
-        `자동 이어서 진행 실패 · ${error instanceof Error ? error.message : String(error)}`,
-        true
-      );
-    });
+    submitAutoContinuePrompt(latestMessage, trigger).catch(reportAutoContinueError);
   }, AUTO_CONTINUE_DELAY_MS);
 }
 
@@ -594,10 +793,6 @@ function findExactLink(root, acceptedTexts) {
   return findExactControl(root, acceptedTexts, "a, [role='link']");
 }
 
-function findExactMenuItem(root, acceptedTexts) {
-  return findExactControl(root, acceptedTexts, "[role='menuitem']");
-}
-
 function getModernPluginRowButtons(section) {
   return [...section.querySelectorAll("button")].filter(
     (button) => isVisible(button) && !button.hasAttribute("aria-haspopup")
@@ -648,6 +843,10 @@ function getModernPluginListSections() {
 }
 
 function getInstalledPluginEntries() {
+  if (classifyPluginPage(window.location.pathname) !== "list" &&
+      window.location.hash !== "#settings/Plugins") {
+    return [];
+  }
   const search = document.querySelector("#installed-plugins-search");
   let buttons;
 
@@ -697,19 +896,6 @@ function findExactButton(root, acceptedTexts) {
   );
   if (buttons.length > 1) {
     throw new Error(`같은 작업 버튼이 ${buttons.length}개 발견됐습니다.`);
-  }
-  return buttons[0] || null;
-}
-
-function findProfileMenuButton(root = document) {
-  const buttons = [...root.querySelectorAll("button[aria-label]")].filter(
-    (button) =>
-      isVisible(button) &&
-      !isControlDisabled(button) &&
-      PROFILE_MENU_TEXTS.has(normalize(button.getAttribute("aria-label")))
-  );
-  if (buttons.length > 1) {
-    throw new Error(`프로필 메뉴 버튼이 ${buttons.length}개 보입니다.`);
   }
   return buttons[0] || null;
 }
@@ -791,9 +977,10 @@ function isControlDisabled(control) {
   );
 }
 
-function waitForCondition(predicate, timeoutMs, timeoutMessage) {
+function waitForCondition(predicate, timeoutMs, timeoutMessage, pollIntervalMs = 0) {
   return new Promise((resolve, reject) => {
     let observer;
+    let pollTimer;
     let settled = false;
     const finish = (error, value) => {
       if (settled) {
@@ -801,6 +988,7 @@ function waitForCondition(predicate, timeoutMs, timeoutMessage) {
       }
       settled = true;
       window.clearTimeout(timer);
+      if (pollTimer !== undefined) window.clearInterval(pollTimer);
       observer?.disconnect();
       if (error) {
         reject(error);
@@ -823,7 +1011,7 @@ function waitForCondition(predicate, timeoutMs, timeoutMessage) {
       // Check once more before reporting a completion timeout.
       check();
       if (!settled) {
-        finish(new Error(timeoutMessage));
+        finish(new Error(typeof timeoutMessage === "function" ? timeoutMessage() : timeoutMessage));
       }
     }, timeoutMs);
 
@@ -831,74 +1019,55 @@ function waitForCondition(predicate, timeoutMs, timeoutMessage) {
     observer.observe(document.documentElement, {
       attributes: true,
       childList: true,
+      characterData: true,
       subtree: true
     });
+    if (pollIntervalMs > 0) pollTimer = window.setInterval(check, pollIntervalMs);
     check();
   });
 }
 
-async function openPluginSettings() {
+async function openPluginSettings(options = {}) {
   if (!/^(chatgpt\.com|chat\.openai\.com)$/i.test(window.location.hostname)) {
     throw new Error("ChatGPT 탭에서 실행하세요.");
   }
 
-  const page = classifyPluginPage(window.location.pathname);
-  if (page === "detail") {
-    await returnToPluginList({ name: "현재 플러그인" });
-  } else if (page === "list") {
+  if (classifyPluginPage(window.location.pathname) === "list" ||
+      window.location.hash === "#settings/Plugins") {
     await waitForCondition(
       () => getInstalledPluginEntries().length > 0,
       15000,
       "설치된 플러그인 목록을 열지 못했습니다."
     );
+    return true;
+  }
+
+  const response = await chrome.runtime.sendMessage({
+    type: "open-plugin-settings-for-refresh", options
+  });
+  if (!response?.ok) {
+    throw new Error(response?.error || "플러그인 설정 화면으로 이동하지 못했습니다.");
+  }
+  return false;
+}
+
+async function resumePendingPluginRefresh() {
+  if (classifyPluginPage(window.location.pathname) !== "list" || pluginRefreshPromise) return;
+  pluginRefreshState.status = "running";
+  pluginRefreshState.phase = "resume-navigation";
+  pluginRefreshState.runStartedAt = Date.now();
+  const response = await chrome.runtime.sendMessage({ type: "take-pending-plugin-refresh" });
+  if (!response?.ok) throw new Error(response?.error || "플러그인 새로고침 요청을 복구하지 못했습니다.");
+  if (!response.options) {
+    pluginRefreshState.status = "idle";
     return;
-  } else if (window.location.hash === "#settings/Plugins") {
-    await waitForCondition(
-      () => getInstalledPluginEntries().length > 0,
-      15000,
-      "설치된 플러그인 목록을 열지 못했습니다."
-    );
+  }
+  if (response.options.auto && !document.hidden) {
+    await releaseAutoRefreshSlot(response.options.previousRunAt);
+    pluginRefreshState.status = "aborted";
     return;
   }
-
-  if (!window.location.pathname.startsWith("/settings/")) {
-    let settingsMenuItem = findExactMenuItem(document, SETTINGS_MENU_ITEM_TEXTS);
-    if (!settingsMenuItem) {
-      const profileMenuButton = await waitForCondition(
-        () => findProfileMenuButton(),
-        10000,
-        "프로필 메뉴를 찾지 못했습니다."
-      );
-      clickOnceLikeUser(profileMenuButton);
-      settingsMenuItem = await waitForCondition(
-        () => findExactMenuItem(document, SETTINGS_MENU_ITEM_TEXTS),
-        10000,
-        "ChatGPT 설정 메뉴를 열지 못했습니다."
-      );
-    }
-
-    clickOnceLikeUser(settingsMenuItem);
-    await waitForCondition(
-      () => window.location.pathname.startsWith("/settings/"),
-      15000,
-      "ChatGPT 설정 화면을 열지 못했습니다."
-    );
-  }
-
-  if (classifyPluginPage(window.location.pathname) !== "list") {
-    const pluginsButton = await waitForCondition(
-      () => findExactButton(document, PLUGIN_SETTINGS_NAV_TEXTS),
-      10000,
-      "플러그인 설정 항목을 찾지 못했습니다."
-    );
-    clickOnceLikeUser(pluginsButton);
-  }
-
-  await waitForCondition(
-    () => getInstalledPluginEntries().length > 0,
-    15000,
-    "설치된 플러그인 목록을 열지 못했습니다."
-  );
+  pluginRefreshPromise = refreshConnectedPlugins(response.options);
 }
 
 function findPluginEntry(target) {
@@ -1032,7 +1201,52 @@ function showAutoContinueNotice(message, isError = false) {
   );
 }
 
+function getRefreshButtonState() {
+  const detailRoot = getPluginDetailRoot();
+  const button = detailRoot && findExactButton(detailRoot, REFRESH_BUTTON_TEXTS);
+  return !button ? "missing" : isControlDisabled(button) ? "disabled" : "enabled";
+}
+
+async function recordPluginRefreshError(error) {
+  const startedAt = pluginRefreshState.currentStartedAt || pluginRefreshState.runStartedAt;
+  try {
+    let buttonState = error?.buttonState || "unknown";
+    if (buttonState === "unknown") {
+      try { buttonState = getRefreshButtonState(); } catch { /* An ambiguous/missing UI is diagnostic data. */ }
+    }
+    const result = await chrome.runtime.sendMessage({
+      type: "record-plugin-refresh-error",
+      entry: {
+        plugin: pluginRefreshState.current,
+        phase: pluginRefreshState.phase,
+        code: error?.code || "plugin-refresh-error",
+        message: error instanceof Error ? error.message : String(error),
+        elapsedMs: startedAt ? Math.max(0, Date.now() - startedAt) : 0,
+        buttonState,
+        route: window.location.hash === "#settings/Plugins" ? "legacy" : classifyPluginPage(window.location.pathname),
+        clickCount: pluginRefreshState.clickCount,
+        total: pluginRefreshState.total,
+        clicked: pluginRefreshState.clicked,
+        skipped: pluginRefreshState.skipped
+      }
+    });
+    if (!result?.ok) throw new Error(result?.error || "로그 저장 응답을 받지 못했습니다.");
+  } catch (logError) {
+    pluginRefreshState.logError = logError instanceof Error ? logError.message : String(logError);
+    console.error("Plugin refresh diagnostic log could not be saved", logError);
+  }
+}
+
+async function reportPluginRefreshError(error) {
+  pluginRefreshState.status = "error";
+  pluginRefreshState.error = error instanceof Error ? error.message : String(error);
+  await recordPluginRefreshError(error);
+  const logStatus = pluginRefreshState.logError ? " · 진단 로그 저장 실패" : " · 설정에서 진단 로그 확인";
+  showPluginRefreshNotice(`플러그인 새로고침 중단 · ${pluginRefreshState.error}${logStatus}`, true);
+}
+
 async function refreshCurrentPlugin(target) {
+  pluginRefreshState.phase = "inspect-detail";
   let decision;
   try {
     decision = await waitForCondition(
@@ -1074,26 +1288,10 @@ async function refreshCurrentPlugin(target) {
     throw new Error(`${target.name}: 새로 고침 버튼이 이미 비활성화되어 있습니다.`);
   }
 
+  pluginRefreshState.phase = "click-refresh";
   clickOnceLikeUser(refreshButton);
-  await waitForCondition(
-    () => {
-      const detailRoot = getPluginDetailRoot();
-      const currentButton = detailRoot && findExactButton(detailRoot, REFRESH_BUTTON_TEXTS);
-      return currentButton && isControlDisabled(currentButton);
-    },
-    5000,
-    `${target.name}: 새로 고침 시작을 확인하지 못했습니다.`
-  );
-  await waitForCondition(
-    () => {
-      const detailRoot = getPluginDetailRoot();
-      const currentButton = detailRoot && findExactButton(detailRoot, REFRESH_BUTTON_TEXTS);
-      return currentButton && !isControlDisabled(currentButton);
-    },
-    REFRESH_COMPLETION_TIMEOUT_MS,
-    `${target.name}: 새로 고침 완료 대기 시간이 초과됐습니다.`
-  );
-  pluginRefreshState.completed += 1;
+  pluginRefreshState.clickCount = 1;
+  pluginRefreshState.clicked += 1;
 }
 
 function snapshotPluginRefreshState() {
@@ -1104,15 +1302,21 @@ async function refreshConnectedPlugins({ auto = false, previousRunAt = 0, inspec
   Object.assign(pluginRefreshState, {
     status: "running",
     total: 0,
-    completed: 0,
+    clicked: 0,
     skipped: 0,
     current: "",
     currentStartedAt: 0,
-    error: ""
+    runStartedAt: Date.now(),
+    auto,
+    phase: "open-settings",
+    clickCount: 0,
+    error: "",
+    logError: ""
   });
 
   try {
-    await openPluginSettings();
+    if (!await openPluginSettings({ auto, previousRunAt, inspectAll })) return;
+    pluginRefreshState.phase = "collect-list";
     const modernList = Boolean(document.querySelector("#installed-plugins-search"));
     const targets = getInstalledPluginEntries().map(({ key, name, button }) => ({
       key,
@@ -1138,28 +1342,31 @@ async function refreshConnectedPlugins({ auto = false, previousRunAt = 0, inspec
 
       pluginRefreshState.current = target.name;
       pluginRefreshState.currentStartedAt = Date.now();
+      pluginRefreshState.clickCount = 0;
       if (shouldFastSkipPluginRow(target.rowKind, inspectAll, hasPermissionedEntries)) {
         pluginRefreshState.skipped += 1;
         continue;
       }
+      pluginRefreshState.phase = "open-detail";
       await openPluginDetail(target);
       await refreshCurrentPlugin(target);
+      pluginRefreshState.phase = "return-list";
       await returnToPluginList(target);
     }
 
+    pluginRefreshState.phase = "close-settings";
     await closePluginSettings();
     pluginRefreshState.current = "";
     pluginRefreshState.currentStartedAt = 0;
     pluginRefreshState.status = "done";
+    pluginRefreshState.phase = "done";
     if (!auto) {
       showPluginRefreshNotice(
-        `플러그인 새로고침 완료 · 완료 ${pluginRefreshState.completed}/${pluginRefreshState.total} · 건너뜀 ${pluginRefreshState.skipped}`
+        `플러그인 새로고침 클릭 완료 · 클릭 ${pluginRefreshState.clicked}/${pluginRefreshState.total} · 건너뜀 ${pluginRefreshState.skipped}`
       );
     }
   } catch (error) {
-    pluginRefreshState.status = "error";
-    pluginRefreshState.error = error instanceof Error ? error.message : String(error);
-    showPluginRefreshNotice(`플러그인 새로고침 중단 · ${pluginRefreshState.error}`, true);
+    await reportPluginRefreshError(error);
   } finally {
     pluginRefreshPromise = null;
   }
@@ -1321,10 +1528,19 @@ function scheduleScan() {
 }
 
 const observer = new MutationObserver(scheduleScan);
+document.addEventListener?.("submit", observeManualPromptSubmission, true);
 
-loadSettings().then(() => {
+loadSettings().then(async () => {
+  settings.autoContinueMaxTurns = normalizeAutoContinueMaxTurns(
+    settings.autoContinueMaxTurns
+  );
   initializeAutoContinue();
   scan();
+  try {
+    await resumePendingPluginRefresh();
+  } catch (error) {
+    await reportPluginRefreshError(error);
+  }
   // ponytail: the automatic run rides the existing scan interval, so it needs an
   // open ChatGPT tab and can stall if Chrome freezes that tab mid-sweep. It
   // resumes on unfreeze and the abort path closes the dialog. Move to a service
