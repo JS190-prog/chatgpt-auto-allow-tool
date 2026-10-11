@@ -102,6 +102,7 @@ assert.strictEqual(
 assert.strictEqual(context.classifyPluginPage("/settings/general-settings"), "other");
 assert.strictEqual(vm.runInContext('REFRESH_BUTTON_TEXTS.has("도구 새로 고침")', context), true);
 assert.strictEqual(vm.runInContext('REFRESH_BUTTON_TEXTS.has("refresh tools")', context), true);
+assert.strictEqual(vm.runInContext('DETAIL_INFO_TEXTS.has("앱 정보")', context), true, "current detail heading is 앱 정보");
 class FakePluginNode extends FakeElement {
   constructor(tagName, { id = "", ownText = "", innerText = "", hasPopup = false } = {}) {
     super();

@@ -52,7 +52,7 @@ const BROWSE_PLUGIN_TEXTS = new Set([
   "디렉터리 둘러보기",
   "browse directory"
 ]);
-const DETAIL_INFO_TEXTS = new Set(["정보", "information"]);
+const DETAIL_INFO_TEXTS = new Set(["정보", "information", "앱 정보", "app information", "app info"]);
 const DETAIL_SKILLS_TEXTS = new Set(["스킬", "skills"]);
 const pluginRefreshState = {
   status: "idle",
@@ -918,9 +918,9 @@ function classifyPluginDetail(refreshButton, infoHeading) {
 
 function getPluginDetailDecision(root) {
   const modernDetail = classifyPluginPage(window.location.pathname) === "detail";
-  const navigationControl = modernDetail
-    ? findExactLink(root, PLUGIN_BREADCRUMB_TEXTS)
-    : findExactButton(root, BACK_BUTTON_TEXTS);
+  // The modern detail route has no breadcrumb link any more; the route itself
+  // proves we are on a detail page and return uses history navigation.
+  const navigationControl = modernDetail ? true : findExactButton(root, BACK_BUTTON_TEXTS);
   const infoHeading = findOwnTextElement(root, DETAIL_INFO_TEXTS);
   const skillsHeading = findOwnTextElement(root, DETAIL_SKILLS_TEXTS);
   const connectedAccounts = findOwnTextElement(root, CONNECTED_ACCOUNT_TEXTS);
@@ -1119,11 +1119,11 @@ async function openPluginDetail(target) {
 async function returnToPluginList(target) {
   if (classifyPluginPage(window.location.pathname) === "detail") {
     const breadcrumb = findExactLink(document, PLUGIN_BREADCRUMB_TEXTS);
-    if (!breadcrumb) {
-      throw new Error(`${target.name}: 플러그인 목록 이동 경로를 찾지 못했습니다.`);
+    if (breadcrumb) {
+      clickOnceLikeUser(breadcrumb);
+    } else {
+      window.history.back();
     }
-
-    clickOnceLikeUser(breadcrumb);
     await waitForCondition(
       () =>
         classifyPluginPage(window.location.pathname) === "list" &&

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.17
+
+- Fix: refresh aborted with "상세 화면을 열지 못했습니다" because the current detail page uses the heading `앱 정보` and has no `플러그인` breadcrumb link. The info heading is recognized, the detail route itself counts as navigation, and the return to the list falls back to history navigation when no breadcrumb exists.
+
 ## 0.5.16
 
 - Fix: plugin refresh aborted with "설치된 플러그인 목록을 열지 못했습니다" because ChatGPT now renders installed-plugin rows as links (`a[href="/settings/plugins-settings/<id>"]`) instead of buttons. Both row types are recognized, and link rows read permission labels from their sibling status container.
