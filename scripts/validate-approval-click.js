@@ -36,7 +36,7 @@ function harness({
   const ctx = {
     Element, MouseEvent: Event, PointerEvent: Event, console,
     MutationObserver: class { observe() {} disconnect() {} },
-    document: { documentElement: {}, querySelectorAll: () => [activeButton, dropdown].filter(Boolean) },
+    document: { documentElement: {}, querySelector: () => null, querySelectorAll: () => [activeButton, dropdown].filter(Boolean) },
     window: {
       setTimeout: (fn) => { timers.push(fn); return timers.length; },
       clearTimeout() {}, setInterval() {},

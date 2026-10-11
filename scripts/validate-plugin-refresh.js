@@ -13,7 +13,10 @@ class FakeMutationObserver {
 
 const context = {
   chrome: {
-    runtime: { onMessage: { addListener: (listener) => listeners.push(listener) } },
+    runtime: {
+      onMessage: { addListener: (listener) => listeners.push(listener) },
+      sendMessage: async () => ({ ok: true, options: null })
+    },
     storage: {
       onChanged: { addListener() {} },
       local: {
@@ -28,7 +31,7 @@ const context = {
   },
   console,
   Date,
-  document: { documentElement: {}, hidden: true, querySelectorAll: () => [] },
+  document: { documentElement: {}, hidden: true, querySelector: () => null, querySelectorAll: () => [] },
   Element: FakeElement,
   Map,
   MutationObserver: FakeMutationObserver,
@@ -99,37 +102,7 @@ assert.strictEqual(
 assert.strictEqual(context.classifyPluginPage("/settings/general-settings"), "other");
 assert.strictEqual(vm.runInContext('REFRESH_BUTTON_TEXTS.has("도구 새로 고침")', context), true);
 assert.strictEqual(vm.runInContext('REFRESH_BUTTON_TEXTS.has("refresh tools")', context), true);
-class FakeProfileButton extends FakeElement {
-  constructor({ width, disabled = false }) {
-    super();
-    this.innerText = "계정 이니셜";
-    this.disabled = disabled;
-    this.width = width;
-  }
-
-  getAttribute(name) {
-    return name === "aria-label" ? "프로필 메뉴 열기" : null;
-  }
-
-  hasAttribute() {
-    return false;
-  }
-
-  getBoundingClientRect() {
-    return { width: this.width, height: this.width };
-  }
-}
-const hiddenProfileButton = new FakeProfileButton({ width: 0 });
-const loadingProfileButton = new FakeProfileButton({ width: 48, disabled: true });
-const visibleProfileButton = new FakeProfileButton({ width: 48 });
-assert.notStrictEqual(context.getText(visibleProfileButton), "프로필 메뉴 열기");
-assert.strictEqual(
-  context.findProfileMenuButton({
-    querySelectorAll: () => [hiddenProfileButton, loadingProfileButton, visibleProfileButton]
-  }),
-  visibleProfileButton,
-  "the visible enabled profile button is identified by aria-label despite its account text"
-);
+assert.strictEqual(vm.runInContext('DETAIL_INFO_TEXTS.has("앱 정보")', context), true, "current detail heading is 앱 정보");
 class FakePluginNode extends FakeElement {
   constructor(tagName, { id = "", ownText = "", innerText = "", hasPopup = false } = {}) {
     super();
@@ -150,9 +123,13 @@ class FakePluginNode extends FakeElement {
 
   querySelectorAll(selector) {
     const descendants = this.children.flatMap((child) => [child, ...child.querySelectorAll("*")]);
-    return selector === "*"
-      ? descendants
-      : descendants.filter((child) => child.tagName.toLowerCase() === selector);
+    if (selector === "*") return descendants;
+    const tags = selector.split(",").map((part) => part.trim().replace(/\[.*\]$/, "").toLowerCase());
+    return descendants.filter((child) => tags.includes(child.tagName.toLowerCase()));
+  }
+
+  getAttribute(name) {
+    return name === "href" ? this.href ?? null : null;
   }
 
   getBoundingClientRect() {
@@ -187,10 +164,15 @@ const firstInstalledSection = installedContainer.append(new FakePluginNode("sect
 firstInstalledSection.append(new FakePluginNode("button", { innerText: "Installed One" }));
 const secondInstalledSection = installedContainer.append(new FakePluginNode("section"));
 secondInstalledSection.append(new FakePluginNode("button", { innerText: "Installed Two" }));
+const linkInstalledSection = installedContainer.append(new FakePluginNode("section"));
+const linkRow = linkInstalledSection.append(new FakePluginNode("a", { innerText: "Linked One" }));
+linkRow.href = "/settings/plugins-settings/plugin_app_1";
+linkInstalledSection.append(new FakePluginNode("a", { innerText: "Elsewhere" })).href = "/settings/general-settings";
 const unrelatedSection = pluginPage.append(new FakePluginNode("section"));
 unrelatedSection.append(new FakePluginNode("button", { innerText: "Unrelated Action" }));
 pluginPage.querySelectorAll("*").forEach((node, index) => { node.order = index; });
 const originalDocument = context.document;
+context.window.location.pathname = "/settings/plugins-settings";
 context.document = {
   querySelector: (selector) =>
     pluginPage.querySelectorAll("*").find((node) => `#${node.id}` === selector) || null,
@@ -198,13 +180,13 @@ context.document = {
 };
 assert.deepStrictEqual(
   [...context.getModernPluginListSections()],
-  [firstInstalledSection, secondInstalledSection],
+  [firstInstalledSection, secondInstalledSection, linkInstalledSection],
   "installed sections must exclude the Pro account's default-permissions menu"
 );
 assert.deepStrictEqual(
   [...context.getInstalledPluginEntries()].map((entry) => entry.name),
-  ["Installed One", "Installed Two"],
-  "all installed sections are swept without including a later unrelated section"
+  ["Installed One", "Installed Two", "Linked One"],
+  "all installed sections (button or link rows) are swept without a later unrelated section or foreign link"
 );
 const rowWithStatus = (value) => ({
   lastElementChild: { tagName: "DIV", querySelectorAll: () => [{ textContent: value }] }
@@ -212,11 +194,17 @@ const rowWithStatus = (value) => ({
 assert.strictEqual(context.classifyModernPluginRow(rowWithStatus("모든 도구 허용")), "tool-permission");
 assert.strictEqual(context.classifyModernPluginRow(rowWithStatus("")), "no-tool-permission");
 assert.strictEqual(context.classifyModernPluginRow({ lastElementChild: null }), "unknown");
+assert.strictEqual(
+  context.classifyModernPluginRow({ tagName: "A", nextElementSibling: rowWithStatus("모든 도구 허용").lastElementChild }),
+  "tool-permission",
+  "link rows read permission labels from the sibling status container"
+);
 assert.strictEqual(context.shouldFastSkipPluginRow("no-tool-permission", false, true), true);
 assert.strictEqual(context.shouldFastSkipPluginRow("no-tool-permission", true, true), false);
 assert.strictEqual(context.shouldFastSkipPluginRow("no-tool-permission", false, false), false);
 assert.strictEqual(context.shouldFastSkipPluginRow("unknown", false, true), false);
 context.document = originalDocument;
+context.window.location.pathname = "/";
 assert.strictEqual(
   context.isPluginDetailReady({
     modernDetail: true,
@@ -300,7 +288,6 @@ assert.strictEqual(source.includes("const entry = await waitForPluginEntry(targe
 assert.strictEqual(source.includes("timeoutMs = 12000"), true);
 assert.strictEqual(source.includes("목록에서 다시 찾지 못했습니다."), false);
 assert.strictEqual(source.includes("function showPluginRefreshNotice(message, isError = false)"), true);
-assert.strictEqual(vm.runInContext("REFRESH_COMPLETION_TIMEOUT_MS", context), 180000);
 assert.strictEqual(
   fs.readFileSync("popup.html", "utf8").includes('id="inspectAllPlugins"'),
   true

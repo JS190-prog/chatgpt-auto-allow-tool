@@ -47,7 +47,11 @@ Click the toolbar icon to quickly toggle automatic approval. For full settings, 
 
 ## Automatic Continuation
 
-This opt-in feature reacts only after it observes a new response transition from generating to complete. It does not submit for old responses present when the page opens or for rerenders of an already handled response, and it never overwrites text already in the composer.
+This opt-in feature reacts after a newly started response completes, using both generation state and manual form-submission signals. It does not submit for old responses present when the page opens or for rerenders of an already handled response, and it never overwrites text already in the composer.
+
+The current response heading and completion controls are also recognized when author-role attributes are absent. After a new response finishes, the extension inserts its prompt and activates the composer's `보내기` button once. The popup shows progress, counts and errors; continuation failures persist in automation diagnostics from 0.5.12 onward without recording prompts or response content.
+
+An unconfirmed send stops further automatic submissions. Submit a new message manually or toggle the feature off and on to resume watching.
 
 Automatically generated follow-up responses stay in the same count. The chain stops at the configured maximum and resets when you manually send a new message. A top-right notice shows the current count after each confirmed automatic send and changes to a completion notice after the last follow-up response finishes.
 
@@ -57,11 +61,13 @@ The option-page checkbox is the default for tabs without an override. The popup'
 
 ChatGPT only picks up a connector's new tool list after `새로 고침` is clicked on that plugin. This extension runs that whole sweep for you on an interval.
 
-Manual and automatic runs use a faster mode by default: they skip opening entries with no visible tool-permission status. For a manual run, select `권한 표시 없는 앱도 확인 (느림)` in the popup to inspect every installed app. The popup shows elapsed time for the current app, and waits up to three minutes for a slow refresh to finish.
+Manual and automatic runs skip opening entries with no visible tool-permission status by default. For a manual run, select `권한 표시 없는 앱도 확인 (느림)` in the popup to inspect every installed app. Each refresh button is clicked once, then the sweep immediately returns to the list and opens the next app. It checks screen transitions but does not wait for server completion. Results count clicks, not successful server refreshes. A disabled control, failed click or navigation error stops the sweep and is recorded in diagnostics.
 
 An automatic run starts **only while the ChatGPT tab is in the background**, and stops the moment you switch back to it; the remaining plugins are picked up at the next idle window. The settings dialog never opens in front of you. Multiple ChatGPT tabs share the last-run timestamp, so the sweep runs once.
 
 Successful automatic runs stay silent. Only failures raise a notice. The manual run from the popup still shows its completion notice.
+
+From 0.5.11 onward, the latest 100 refresh and settings-navigation errors persist in Chrome local storage; 0.5.12 also records continuation errors. Open `자동화 진단 로그` in the extension's options to view or copy time, version, feature, phase, elapsed time and click count. Plugin records include plugin name and button state; continuation records include sent count and turn limit. Conversation content and MCP addresses are excluded. Storage failures are reported separately.
 
 ## How It Works
 
