@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "ChatGPT Auto Allow Tool",
-  "description": "Automatically allows ChatGPT tools and optionally continues completed responses.",
-  "version": "0.5.17",
+  "name": "Auto Allow Tool",
+  "description": "Unofficial helper for chatgpt.com: auto-approves tool permission prompts, refreshes plugin tools, optionally auto-continues.",
+  "version": "0.5.18",
   "permissions": ["storage"],
   "host_permissions": [
     "https://chatgpt.com/*",
@@ -28,7 +28,7 @@
     "128": "icons/icon128.png"
   },
   "action": {
-    "default_title": "ChatGPT Auto Allow Tool",
+    "default_title": "Auto Allow Tool",
     "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/icon16.png",
