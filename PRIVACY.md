@@ -1,32 +1,57 @@
 # Privacy Policy
 
-ChatGPT Auto Allow Tool runs locally in the browser as a Chrome extension.
+ChatGPT Auto Allow Tool runs locally in the browser as a Chrome extension. It is an unofficial tool and is not affiliated with OpenAI.
 
 ## Data Collection
 
-This extension does not collect, sell, transmit, or share user data.
+This extension does not collect, sell, transmit, or share user data. Nothing is sent to the developer or any third party.
 
-## Local Storage
+## Page Content
 
-The extension stores only its settings with Chrome extension storage:
+The content script reads ChatGPT pages only to find tool-permission cards, allow buttons, the plugin settings screen and the response composer. Permission-card text and plugin names are processed on the device to decide what to click. Prompts and responses are not stored.
+
+## Stored Data
+
+### Settings (`chrome.storage.sync`)
 
 - whether automatic clicking is enabled
 - click delay
 - optional allow-list tool names
 - optional deny-list keywords
+- automatic plugin refresh interval (hours)
 - whether automatic continuation is enabled
 - continuation prompt and maximum continuation count
+
+If Chrome Sync is turned on, Chrome syncs these settings to the user's other Chrome browsers signed in to the same Google account. The extension itself does not send them anywhere.
+
+### Local state (`chrome.storage.local`)
+
+- the time of the last automatic plugin refresh
+- the automation diagnostic log (see below)
+
+### Session state (`chrome.storage.session`)
+
 - temporary per-tab automatic-continuation overrides, removed when each tab closes
+- a pending plugin-refresh request that lets a refresh resume after navigating to the plugin settings page, removed when it is used, when it is older than two minutes, or when the tab closes
 
-These settings are used only by the extension.
+## Diagnostic Log
 
-## Network Access
+When a plugin refresh or an automatic continuation fails, the extension stores one diagnostic entry on the device. It keeps at most 100 entries. Each entry contains:
 
-The extension does not make its own network requests. It only runs on ChatGPT pages declared in `manifest.json`.
+- time, extension version and feature
+- plugin name (up to 160 characters)
+- step, error code and error message (up to 600 characters, with URLs and token-like strings masked)
+- elapsed time, refresh-button state, page type and click/skip/send counts
+
+The log never contains prompts or response content. The user can view and copy it from the options page.
+
+## Network Access and Navigation
+
+The extension does not make its own network requests. When a plugin refresh starts, it navigates the current ChatGPT tab to `https://chatgpt.com/settings/plugins-settings`. An automatic refresh runs only when the user has set an interval and the ChatGPT tab is in the background.
 
 ## Permission Scope
 
-The extension is limited to:
+The extension uses the `storage` permission and is limited to:
 
 - `https://chatgpt.com/*`
 - `https://chat.openai.com/*`
