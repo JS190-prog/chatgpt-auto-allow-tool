@@ -122,9 +122,13 @@ class FakePluginNode extends FakeElement {
 
   querySelectorAll(selector) {
     const descendants = this.children.flatMap((child) => [child, ...child.querySelectorAll("*")]);
-    return selector === "*"
-      ? descendants
-      : descendants.filter((child) => child.tagName.toLowerCase() === selector);
+    if (selector === "*") return descendants;
+    const tags = selector.split(",").map((part) => part.trim().replace(/\[.*\]$/, "").toLowerCase());
+    return descendants.filter((child) => tags.includes(child.tagName.toLowerCase()));
+  }
+
+  getAttribute(name) {
+    return name === "href" ? this.href ?? null : null;
   }
 
   getBoundingClientRect() {
@@ -159,6 +163,10 @@ const firstInstalledSection = installedContainer.append(new FakePluginNode("sect
 firstInstalledSection.append(new FakePluginNode("button", { innerText: "Installed One" }));
 const secondInstalledSection = installedContainer.append(new FakePluginNode("section"));
 secondInstalledSection.append(new FakePluginNode("button", { innerText: "Installed Two" }));
+const linkInstalledSection = installedContainer.append(new FakePluginNode("section"));
+const linkRow = linkInstalledSection.append(new FakePluginNode("a", { innerText: "Linked One" }));
+linkRow.href = "/settings/plugins-settings/plugin_app_1";
+linkInstalledSection.append(new FakePluginNode("a", { innerText: "Elsewhere" })).href = "/settings/general-settings";
 const unrelatedSection = pluginPage.append(new FakePluginNode("section"));
 unrelatedSection.append(new FakePluginNode("button", { innerText: "Unrelated Action" }));
 pluginPage.querySelectorAll("*").forEach((node, index) => { node.order = index; });
@@ -171,13 +179,13 @@ context.document = {
 };
 assert.deepStrictEqual(
   [...context.getModernPluginListSections()],
-  [firstInstalledSection, secondInstalledSection],
+  [firstInstalledSection, secondInstalledSection, linkInstalledSection],
   "installed sections must exclude the Pro account's default-permissions menu"
 );
 assert.deepStrictEqual(
   [...context.getInstalledPluginEntries()].map((entry) => entry.name),
-  ["Installed One", "Installed Two"],
-  "all installed sections are swept without including a later unrelated section"
+  ["Installed One", "Installed Two", "Linked One"],
+  "all installed sections (button or link rows) are swept without a later unrelated section or foreign link"
 );
 const rowWithStatus = (value) => ({
   lastElementChild: { tagName: "DIV", querySelectorAll: () => [{ textContent: value }] }
@@ -185,6 +193,11 @@ const rowWithStatus = (value) => ({
 assert.strictEqual(context.classifyModernPluginRow(rowWithStatus("모든 도구 허용")), "tool-permission");
 assert.strictEqual(context.classifyModernPluginRow(rowWithStatus("")), "no-tool-permission");
 assert.strictEqual(context.classifyModernPluginRow({ lastElementChild: null }), "unknown");
+assert.strictEqual(
+  context.classifyModernPluginRow({ tagName: "A", nextElementSibling: rowWithStatus("모든 도구 허용").lastElementChild }),
+  "tool-permission",
+  "link rows read permission labels from the sibling status container"
+);
 assert.strictEqual(context.shouldFastSkipPluginRow("no-tool-permission", false, true), true);
 assert.strictEqual(context.shouldFastSkipPluginRow("no-tool-permission", true, true), false);
 assert.strictEqual(context.shouldFastSkipPluginRow("no-tool-permission", false, false), false);

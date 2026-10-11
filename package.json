@@ -1,6 +1,6 @@
 {
   "name": "chatgpt-auto-allow-tool",
-  "version": "0.5.15",
+  "version": "0.5.16",
   "private": true,
   "description": "Chrome extension that automatically clicks Korean/English allow buttons on ChatGPT tool permission cards.",
   "scripts": {

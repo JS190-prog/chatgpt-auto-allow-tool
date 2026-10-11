@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.16
+
+- Fix: plugin refresh aborted with "설치된 플러그인 목록을 열지 못했습니다" because ChatGPT now renders installed-plugin rows as links (`a[href="/settings/plugins-settings/<id>"]`) instead of buttons. Both row types are recognized, and link rows read permission labels from their sibling status container.
+
 ## 0.5.15
 
 - Safety: buttons such as "Always allow", "Allow all", `항상 허용`, `모든 … 허용` and negated or reject/cancel labels are never auto-clicked. Permission-card text is capped so an oversized ancestor cannot be mistaken for a card.

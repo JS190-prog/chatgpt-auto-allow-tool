@@ -794,13 +794,19 @@ function findExactLink(root, acceptedTexts) {
 }
 
 function getModernPluginRowButtons(section) {
-  return [...section.querySelectorAll("button")].filter(
-    (button) => isVisible(button) && !button.hasAttribute("aria-haspopup")
+  // ChatGPT now renders each installed row as a link to its detail route
+  // (`<a href="/settings/plugins-settings/<id>">`); older builds used buttons.
+  return [...section.querySelectorAll("button, a[href]")].filter(
+    (button) =>
+      isVisible(button) &&
+      !button.hasAttribute("aria-haspopup") &&
+      (button.tagName !== "A" || /^\/settings\/plugins-settings\/[^/]+$/.test(button.getAttribute("href")))
   );
 }
 
 function classifyModernPluginRow(button) {
-  const statusContainer = button.lastElementChild;
+  // A link row keeps its permission labels in the sibling status container.
+  const statusContainer = button.tagName === "A" ? button.nextElementSibling : button.lastElementChild;
   if (statusContainer?.tagName !== "DIV") {
     return "unknown";
   }
