@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="ko">
+<head><meta charset="utf-8"><link rel="stylesheet" href="common.css">
+<style>
+  .options { width: 600px; }
+  .options main { padding: 26px 30px 30px; font: 14px/1.5 "Segoe UI", "Malgun Gothic", sans-serif; color: #202124; }
+  .options h2 { margin: 0 0 18px; font-size: 20px; }
+  .options label { display: grid; gap: 7px; margin: 14px 0; font-weight: 600; }
+  .options .row { display: flex; align-items: center; gap: 10px; }
+  .options input[type="text"], .options input[type="number"] {
+    width: 100%; padding: 9px 12px; border: 1px solid #c8ccd2; border-radius: 6px; font: inherit; font-weight: 400;
+  }
+  .options input[type="checkbox"] { width: 16px; height: 16px; margin: 0; accent-color: #1a73e8; }
+  .options .hl input { border-color: var(--teal-500); box-shadow: 0 0 0 3px var(--teal-100); }
+  .options button { margin-top: 6px; padding: 10px 16px; color: #fff; background: #111; border: 0; border-radius: 6px; font: inherit; font-weight: 700; }
+  .options .saved { min-height: 20px; margin: 4px 0 0; color: #188038; }
+</style>
+</head>
+<body>
+  <section class="copy">
+    <div class="brand"><img src="../../../icons/icon128.png" alt="">ChatGPT Auto Allow Tool</div>
+    <h1>필요한 도구만<br><em>골라서 승인</em></h1>
+    <p>허용할 도구 이름과 제외 키워드로 자동 승인 범위를 직접 정하세요.</p>
+    <ul>
+      <li>도구 이름 전체가 일치할 때만 허용</li>
+      <li>제외 키워드가 있는 카드는 건너뜀</li>
+      <li>‘항상 허용’ 같은 넓은 버튼은 절대 누르지 않음</li>
+    </ul>
+  </section>
+  <section class="stage">
+    <div class="window options">
+      <div class="bar"><i></i><i></i><i></i><span>확장 프로그램 옵션</span></div>
+      <main>
+        <h2>ChatGPT Auto Allow Tool</h2>
+        <label class="row"><input type="checkbox" checked><span>자동 허용 사용</span></label>
+        <label>클릭 지연 시간(ms)<input type="number" value="300"></label>
+        <label class="hl">허용할 도구 이름<input type="text" value="search, fetch"></label>
+        <label class="hl">자동 클릭 제외 키워드<input type="text" value="delete, remove, 삭제"></label>
+        <label>플러그인 자동 새로고침 주기(시간)<input type="number" value="0"></label>
+        <label class="row"><input type="checkbox"><span>자동 이어서 진행 기본값</span></label>
+        <button type="button">저장</button>
+        <p class="saved">저장되었습니다.</p>
+      </main>
+    </div>
+  </section>
+</body>
+</html>

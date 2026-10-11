@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ko">
+<head><meta charset="utf-8"><link rel="stylesheet" href="common.css">
+<style>
+  .stage { justify-content: flex-start; }
+  .chat { position: relative; width: 560px; height: 560px; }
+  .chat .body { padding: 84px 28px 26px; font: 15px/1.6 "Noto Sans KR", "Malgun Gothic", sans-serif; }
+  .bubble-user { margin: 0 0 18px auto; width: fit-content; max-width: 75%; padding: 10px 15px; background: #eef1f1; border-radius: 18px; }
+  .bubble-user.auto { background: var(--teal-100); }
+  .bubble-user.auto small { display: block; color: var(--teal-700); font-size: 12px; font-weight: 700; }
+  .reply { margin: 0 0 18px; color: #3b4847; }
+  .reply .line { height: 10px; margin: 8px 0; border-radius: 5px; background: #e6ebea; }
+  .chat .notice { position: absolute; top: 56px; right: 16px; }
+  .popup { position: absolute; right: -10px; bottom: 70px; zoom: 1.25; }
+</style>
+</head>
+<body>
+  <section class="copy">
+    <div class="brand"><img src="../../../icons/icon128.png" alt="">ChatGPT Auto Allow Tool</div>
+    <h1>긴 작업도<br><em>멈추지 않고 이어서</em></h1>
+    <p>응답이 끝나면 정해 둔 문구를 자동으로 보내 다음 단계를 이어 갑니다. 기본값은 꺼짐입니다.</p>
+    <ul>
+      <li>직접 보낸 메시지당 최대 횟수 지정 (1~100회)</li>
+      <li>작성 중인 글은 덮어쓰지 않음</li>
+      <li>팝업에서 현재 탭만 따로 켜고 끄기</li>
+    </ul>
+  </section>
+  <section class="stage">
+    <div class="window chat">
+      <div class="bar"><i></i><i></i><i></i><span>chatgpt.com</span></div>
+      <div class="body">
+        <div class="bubble-user">보고서 초안을 장별로 작성해 줘</div>
+        <div class="reply"><div class="line" style="width:92%"></div><div class="line" style="width:80%"></div><div class="line" style="width:55%"></div></div>
+        <div class="bubble-user auto"><small>자동 전송</small>이어서 진행</div>
+        <div class="reply"><div class="line" style="width:60%"></div><div class="line" style="width:45%"></div></div>
+      </div>
+      <div class="notice"><span>자동 이어서 진행 · 1/3회 전송</span><b>×</b></div>
+    </div>
+    <div class="popup">
+      <main>
+        <header>
+          <img src="../../../icons/icon48.png" alt="" width="32" height="32">
+          <div><h1>Auto Allow</h1><p>자동 허용 켜짐</p></div>
+        </header>
+        <label class="toggle"><span>이 탭 자동 이어서 진행</span><input type="checkbox" checked></label>
+        <p class="scope">현재 탭만 별도로 켜짐</p>
+        <p>답변 완료 대기 · 1/3회</p>
+      </main>
+    </div>
+    <span class="caption-tag">예시 화면</span>
+  </section>
+</body>
+</html>
