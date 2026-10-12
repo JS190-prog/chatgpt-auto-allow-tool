@@ -1,10 +1,14 @@
 # Privacy Policy
 
-ChatGPT Auto Allow Tool runs locally in the browser as a Chrome extension. It is an unofficial tool and is not affiliated with OpenAI.
+Auto Allow Tool runs locally in the browser as a Chrome extension. It is an unofficial helper for ChatGPT (chatgpt.com) and is not affiliated with, endorsed by, or produced by OpenAI.
 
 ## Data Collection
 
 This extension does not collect, sell, transmit, or share user data. Nothing is sent to the developer or any third party.
+
+## Limited Use
+
+The use of information handled by this extension adheres to the [Chrome Web Store User Data Policy](https://developer.chrome.com/docs/webstore/program-policies/user-data-faq), including the Limited Use requirements. Page content is used only for the extension's single purpose of automating tool approval and tool management on ChatGPT, and is never used for advertising, sold, or transferred.
 
 ## Page Content
 

@@ -1,0 +1,181 @@
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  width: 1280px;
+  height: 800px;
+  overflow: hidden;
+}
+
+body {
+  --ink: #0f1f1e;
+  --muted: #4b5f5d;
+  --teal-900: #0b3533;
+  --teal-700: #0e5c55;
+  --teal-500: #14a08f;
+  --teal-100: #d6efeb;
+  --ground: #eef5f3;
+  display: grid;
+  grid-template-columns: 500px 1fr;
+  gap: 40px;
+  align-items: center;
+  padding: 0 72px;
+  color: var(--ink);
+  background:
+    radial-gradient(900px 600px at 100% 0%, #d3ece7 0%, transparent 60%),
+    var(--ground);
+  font-family: "Noto Sans KR", "Malgun Gothic", "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.copy .brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 28px;
+  color: var(--teal-700);
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.copy .brand img { width: 30px; height: 30px; border-radius: 7px; }
+
+.copy h1 {
+  margin: 0 0 20px;
+  font-size: 46px;
+  line-height: 1.25;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  word-break: keep-all;
+}
+
+.copy h1 em { font-style: normal; color: var(--teal-500); }
+
+.copy p {
+  margin: 0 0 28px;
+  color: var(--muted);
+  font-size: 20px;
+  line-height: 1.6;
+  word-break: keep-all;
+}
+
+.copy ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 12px;
+}
+
+.copy li {
+  position: relative;
+  padding-left: 30px;
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 1.5;
+  word-break: keep-all;
+}
+
+.copy li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 5px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--teal-500) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M5 10.5l3.2 3L15 7' fill='none' stroke='white' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 14px no-repeat;
+}
+
+.stage {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 800px;
+}
+
+.window {
+  background: #fff;
+  border-radius: 14px;
+  box-shadow: 0 30px 60px -20px rgba(11, 53, 51, 0.35), 0 0 0 1px rgba(11, 53, 51, 0.08);
+  overflow: hidden;
+}
+
+.window .bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 16px;
+  background: #f1f4f4;
+  border-bottom: 1px solid #e1e7e6;
+}
+
+.window .bar i {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #cfd8d7;
+}
+
+.window .bar span {
+  margin-left: 12px;
+  color: #6b7b79;
+  font-size: 13px;
+}
+
+.caption-tag {
+  position: absolute;
+  bottom: 40px;
+  right: 0;
+  color: #7a8b89;
+  font-size: 13px;
+}
+
+/* Real popup.css, scoped and scaled for legibility. */
+.popup {
+  width: 280px;
+  color: #17202a;
+  background: #f7f8fa;
+  font: 13px/1.45 "Segoe UI", "Malgun Gothic", sans-serif;
+  border-radius: 10px;
+  box-shadow: 0 30px 60px -20px rgba(11, 53, 51, 0.4), 0 0 0 1px rgba(11, 53, 51, 0.1);
+  zoom: 1.45;
+}
+.popup main { padding: 14px; }
+.popup header { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.popup h1, .popup p { margin: 0; }
+.popup h1 { font-size: 16px; }
+.popup p { color: #5f6b7a; }
+.popup .toggle, .popup dl div {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; padding: 10px 0; border-top: 1px solid #d9dde3;
+}
+.popup .toggle { font-weight: 700; }
+.popup input[type="checkbox"] { width: 18px; height: 18px; margin: 0; accent-color: #1a73e8; }
+.popup dl { margin: 0 0 12px; }
+.popup dt { color: #5f6b7a; }
+.popup dd { max-width: 160px; margin: 0; overflow: hidden; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
+.popup button {
+  width: 100%; padding: 9px 12px; color: #fff; background: #111827; border: 0;
+  border-radius: 6px; font: inherit; font-weight: 700;
+}
+.popup button + button { margin-top: 8px; }
+.popup .refresh-status { min-height: 19px; margin: 6px 0 8px; }
+.popup .scope { min-height: 19px; margin: -4px 0 8px; }
+
+/* The in-page notice exactly as content.js renders it. */
+.notice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 420px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: #166534;
+  color: #fff;
+  font: 600 14px/1.4 "Segoe UI", "Malgun Gothic", sans-serif;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+.notice b { font: 700 20px/1 system-ui, sans-serif; }

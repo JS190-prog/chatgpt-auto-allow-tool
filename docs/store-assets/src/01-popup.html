@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="ko">
+<head><meta charset="utf-8"><link rel="stylesheet" href="common.css"></head>
+<body>
+  <section class="copy">
+    <div class="brand"><img src="../../../icons/icon128.png" alt="">Auto Allow Tool</div>
+    <h1>도구 승인 클릭,<br><em>이제 자동으로</em></h1>
+    <p>ChatGPT가 도구를 쓸 때마다 뜨는 권한 카드의 허용 버튼을 대신 눌러 줍니다.</p>
+    <ul>
+      <li>툴바 팝업에서 바로 켜고 끄기</li>
+      <li>클릭 지연 시간과 허용 목록 한눈에 확인</li>
+      <li>사용자 데이터 수집·전송 없음</li>
+    </ul>
+  </section>
+  <section class="stage">
+    <div class="popup">
+      <main>
+        <header>
+          <img src="../../../icons/icon48.png" alt="" width="32" height="32">
+          <div><h1>Auto Allow</h1><p>자동 허용 켜짐</p></div>
+        </header>
+        <label class="toggle"><span>자동 허용</span><input type="checkbox" checked></label>
+        <label class="toggle"><span>이 탭 자동 이어서 진행</span><input type="checkbox"></label>
+        <p class="scope">기본값 사용 중 · 꺼짐</p>
+        <dl>
+          <div><dt>지연</dt><dd>300ms</dd></div>
+          <div><dt>허용 목록</dt><dd>search, fetch</dd></div>
+        </dl>
+        <label class="toggle"><span>권한 표시 없는 앱도 확인 (느림)</span><input type="checkbox"></label>
+        <button type="button">연결 플러그인 전체 새로고침</button>
+        <p class="refresh-status">대기 중</p>
+        <button type="button">옵션 열기</button>
+      </main>
+    </div>
+  </section>
+</body>
+</html>

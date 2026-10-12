@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for improving ChatGPT Auto Allow Tool.
+Thanks for improving Auto Allow Tool.
 
 ## Local Checks
 

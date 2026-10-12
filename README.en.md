@@ -1,4 +1,4 @@
-# ChatGPT Auto Allow Tool
+# Auto Allow Tool
 
 [한국어](README.md)
 

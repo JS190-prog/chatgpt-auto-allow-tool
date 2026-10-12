@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="ko">
+<head><meta charset="utf-8"><link rel="stylesheet" href="common.css">
+<style>
+  .chat { width: 620px; padding-bottom: 36px; }
+  .chat .body { padding: 28px 32px 0; font: 15px/1.6 "Noto Sans KR", "Malgun Gothic", sans-serif; }
+  .bubble-user {
+    margin: 0 0 22px auto; max-width: 70%; padding: 12px 16px;
+    background: #eef1f1; border-radius: 18px; width: fit-content;
+  }
+  .assistant-line { margin: 0 0 18px; color: #3b4847; }
+  .card {
+    padding: 18px 20px; border: 1px solid #dfe5e4; border-radius: 14px; background: #fbfcfc;
+  }
+  .card .title { margin: 0 0 4px; font-weight: 700; font-size: 16px; }
+  .card .desc { margin: 0 0 16px; color: #5d6c6a; font-size: 14px; }
+  .card .tool {
+    display: inline-block; margin-bottom: 16px; padding: 3px 10px; border-radius: 999px;
+    background: #e6efee; color: #2d4a47; font: 600 13px/1.6 ui-monospace, Consolas, monospace;
+  }
+  .card .actions { display: flex; justify-content: flex-end; gap: 10px; }
+  .btn { padding: 9px 18px; border-radius: 999px; font-weight: 700; font-size: 14px; border: 1px solid #d3dbda; background: #fff; color: #2b3837; }
+  .btn.never { color: #8a9795; border-style: dashed; }
+  .btn.allow {
+    position: relative; background: #111827; color: #fff; border-color: #111827;
+    box-shadow: 0 0 0 4px #fff, 0 0 0 7px var(--teal-500);
+  }
+  .clicked {
+    position: absolute; right: -14px; top: -38px; white-space: nowrap;
+    padding: 5px 11px; border-radius: 8px; background: var(--teal-500); color: #fff;
+    font-size: 13px; font-weight: 700;
+  }
+  .clicked::after {
+    content: ""; position: absolute; left: 50%; bottom: -6px; margin-left: -6px;
+    border: 6px solid transparent; border-bottom: 0; border-top-color: var(--teal-500);
+  }
+  .skip-note { margin-top: 14px; color: #7a8b89; font-size: 13px; text-align: right; }
+</style>
+</head>
+<body>
+  <section class="copy">
+    <div class="brand"><img src="../../../icons/icon128.png" alt="">Auto Allow Tool</div>
+    <h1>권한 카드가 뜨면<br><em>알아서 허용</em></h1>
+    <p>대화 흐름을 끊지 않고, 조건에 맞는 권한 카드의 허용 버튼만 한 번 누릅니다.</p>
+    <ul>
+      <li>‘허용하기’, ‘한 번만 허용’, ‘Allow’ 등 인식</li>
+      <li>‘항상 허용’, ‘모두 허용’, ‘거절’은 누르지 않음</li>
+      <li>클릭 전 지연 시간 설정 가능</li>
+    </ul>
+  </section>
+  <section class="stage">
+    <div class="window chat">
+      <div class="bar"><i></i><i></i><i></i><span>chatgpt.com</span></div>
+      <div class="body">
+        <div class="bubble-user">최신 자료를 찾아서 요약해 줘</div>
+        <p class="assistant-line">검색 도구로 관련 자료를 찾아볼게요.</p>
+        <div class="card">
+          <p class="title">ChatGPT에서 search를 사용하도록 허용할까요?</p>
+          <p class="desc">이 도구는 요청에 필요한 정보를 가져옵니다.</p>
+          <span class="tool">search</span>
+          <div class="actions">
+            <span class="btn">거절</span>
+            <span class="btn never">항상 허용</span>
+            <span class="btn allow">허용하기<span class="clicked">자동 클릭</span></span>
+          </div>
+        </div>
+        <p class="skip-note">‘항상 허용’처럼 범위가 넓은 버튼은 건너뜁니다.</p>
+      </div>
+    </div>
+    <span class="caption-tag">예시 화면</span>
+  </section>
+</body>
+</html>

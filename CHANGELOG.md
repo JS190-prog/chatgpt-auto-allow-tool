@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.18
+
+- Renames the extension to "Auto Allow Tool" so the product name no longer uses a third-party trademark; the description states it is an unofficial helper for chatgpt.com. No behavior changes.
+
 ## 0.5.17
 
 - Fix: refresh aborted with "상세 화면을 열지 못했습니다" because the current detail page uses the heading `앱 정보` and has no `플러그인` breadcrumb link. The info heading is recognized, the detail route itself counts as navigation, and the return to the list falls back to history navigation when no breadcrumb exists.
