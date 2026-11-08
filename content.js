@@ -1097,12 +1097,10 @@ async function openPluginDetail(target) {
   clickOnceLikeUser(entry.button);
   await waitForCondition(
     () => {
-      if (classifyPluginPage(window.location.pathname) === "detail") {
-        const heading = [...document.querySelectorAll("h1, h2, h3, h4, [role='heading']")].find(
-          (candidate) => normalize(getText(candidate)) === normalize(target.name)
-        );
-        return heading && getPluginDetailDecision(document);
-      }
+      // Reaching the detail route is all "opened" means. Whether the page has
+      // anything to refresh (or is an unconnected/unrecognized layout that
+      // must be skipped) is decided by refreshCurrentPlugin, not here.
+      if (classifyPluginPage(window.location.pathname) === "detail") return true;
 
       const dialog = getSettingsDialog();
       return (

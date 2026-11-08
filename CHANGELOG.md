@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.19
+
+- Fix: refresh aborted the whole sweep with "<plugin>: 상세 화면을 열지 못했습니다" when a plugin's detail page had no recognized sections (for example an unconnected GitHub app). Opening a detail now only requires reaching its route; pages with nothing to refresh are skipped by the existing classification step instead of aborting the run.
+
 ## 0.5.18
 
 - Renames the extension to "Auto Allow Tool" so the product name no longer uses a third-party trademark; the description states it is an unofficial helper for chatgpt.com. No behavior changes.

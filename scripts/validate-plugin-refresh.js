@@ -364,7 +364,16 @@ const completion = context.waitForCondition(
 completionVisible = true;
 timeoutCallback();
 context.window.setTimeout = originalSetTimeout;
-completion.then(
+// Regression: a detail page with no recognized sections (e.g. an unconnected
+// GitHub app) must count as opened so refreshCurrentPlugin can skip it,
+// instead of aborting the whole sweep with "상세 화면을 열지 못했습니다".
+context.window.location.pathname = "/settings/plugins-settings";
+context.waitForPluginEntry = async () => ({ button: {} });
+context.clickOnceLikeUser = () => {
+  context.window.location.pathname = "/settings/plugins-settings/plugin_app_github";
+};
+assert.strictEqual(context.getPluginDetailDecision(context.document), null, "empty page is unrecognized");
+completion.then(() => context.openPluginDetail({ key: "github#1", name: "GitHub" })).then(
   () => console.log("Plugin refresh checks OK"),
   (error) => {
     console.error(error);
