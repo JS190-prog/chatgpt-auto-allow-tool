@@ -150,9 +150,16 @@ function harness({ maxTurns = 2, sendAvailable = true, logFailure = false, ackSe
   vm.runInContext(`settings.autoContinueEnabled = true; settings.autoContinueMaxTurns = ${maxTurns};`, context);
   context.showAutoContinueNotice = message => notices.push(message);
   send.addEventListener("click", () => { clicks.push(editor.textContent); if (ackSend) editor.textContent = ""; });
-  function addReply({ complete = false, legacy = false } = {}) {
+  function addReply({ complete = false, legacy = false, current = false } = {}) {
     const group = new FixtureElement("div", { class: "group flex flex-col" });
-    if (legacy) group.append(new FixtureElement("div", { "data-message-author-role": "assistant", "data-message-id": `legacy-${conversation.children.length}` }, "Sample answer"));
+    if (current) {
+      // Captured from the live UI: role attribute, print-only "ChatGPT" span in
+      // the heading text, turn state on the group, "Stop" button without test id.
+      group.attributes["data-talvt-turn-state"] = "in_progress";
+      const heading = new FixtureElement("h4", { class: "sr-only m-0", "data-conversation-role": "assistant" });
+      heading.append(new FixtureElement("span", {}, "ChatGPT said:"), new FixtureElement("span", { "aria-hidden": "true" }, "ChatGPT"));
+      group.append(new FixtureElement("div", {}).append(heading, new FixtureElement("p", {}, "Sample answer")));
+    } else if (legacy) group.append(new FixtureElement("div", { "data-message-author-role": "assistant", "data-message-id": `legacy-${conversation.children.length}` }, "Sample answer"));
     else {
       const user = new FixtureElement("div"); user.append(new FixtureElement("h4", { class: "sr-only" }, "내가 한 말:"));
       const answer = new FixtureElement("div"); answer.append(new FixtureElement("h4", { class: "sr-only" }, "ChatGPT 답변:"), new FixtureElement("p", {}, "Sample answer"));
@@ -162,7 +169,9 @@ function harness({ maxTurns = 2, sendAvailable = true, logFailure = false, ackSe
     if (complete) finishReply(group);
     return group;
   }
-  function finishReply(group) { group.append(new FixtureElement("button", { "aria-label": "응답 다시 생성" })); }
+  function finishReply(group) {
+    if (group.attributes["data-talvt-turn-state"]) { group.attributes["data-talvt-turn-state"] = "complete"; return; }
+    group.append(new FixtureElement("button", { "aria-label": "응답 다시 생성" })); }
   return { context, clock, document, conversation, form, editor, send, notices, logs, clicks, errors, addReply, finishReply,
     initialize() { context.initializeAutoContinue(); }, scan() { context.scanAutoContinue(); },
     state() { return context.snapshotAutoContinueTabState(); } };
@@ -255,6 +264,23 @@ async function main() {
   fast.editor.textContent = "";
   fast.addReply({ complete: true }); fast.scan(); await fast.clock.advance(1100);
   assert.equal(fast.clicks.length, 1, "a submitted request whose reply completes between scans must still continue once");
+  // Regression: the live heading text is "ChatGPT said:ChatGPT" and generation
+  // is reported by data-talvt-turn-state, so nothing used to be detected at all.
+  const live = harness(); live.addReply({ current: true }); live.finishReply(live.conversation.children[0]);
+  assert.equal(live.context.getAssistantMessages().length, 1, "the role attribute must identify the assistant heading");
+  live.initialize();
+  const liveReply = live.addReply({ current: true });
+  live.scan();
+  assert.equal(live.context.isResponseGenerating(), true, "in_progress turn state means generating");
+  live.finishReply(liveReply); live.scan(); await live.clock.advance(1100);
+  assert.deepEqual(live.clicks, ["이어서 진행"], "a completed response in the current DOM must be continued");
+  const stopping = harness(); stopping.addReply({ current: true }); stopping.finishReply(stopping.conversation.children[0]);
+  assert.equal(stopping.context.isResponseGenerating(), false);
+  const stopButton = new FixtureElement("button", { "aria-label": "Stop" });
+  stopping.form.append(stopButton);
+  assert.equal(stopping.context.isResponseGenerating(), true, "the composer's Stop button (no test id) means generating");
+  stopButton.attributes["aria-label"] = "응답 중지";
+  assert.equal(stopping.context.isResponseGenerating(), true);
   console.log("Auto continuation runtime checks OK: current DOM, completion, chain limit, draft protection, rerender, transient composer, errors and cancellation");
 }
 

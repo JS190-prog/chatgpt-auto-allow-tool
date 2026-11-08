@@ -77,6 +77,7 @@ const handledAssistantMessages = new WeakSet();
 const handledAssistantMessageKeys = new Set();
 const modernAssistantMessages = new WeakSet();
 const ASSISTANT_HEADING_TEXTS = new Set(["chatgpt 답변:", "chatgpt said:"]);
+const STOP_BUTTON_LABEL_PATTERN = /^(stop( (streaming|response|generating))?|(스트리밍 |응답 )?중지)$/;
 const RESPONSE_COMPLETE_LABELS = new Set(["응답 다시 생성", "응답 평가", "regenerate response", "rate response"]);
 const autoContinueState = {
   ready: false,
@@ -206,10 +207,13 @@ async function setAutoContinueForThisTab(requestedEnabled) {
 function getAssistantMessages() {
   const messages = [];
   const seen = new Set();
-  for (const node of document.querySelectorAll('[data-message-author-role="assistant"], h4.sr-only')) {
+  for (const node of document.querySelectorAll('[data-message-author-role="assistant"], h4.sr-only, h4[data-conversation-role="assistant"]')) {
     let message = node;
     if (node.getAttribute("data-message-author-role") !== "assistant") {
-      if (!ASSISTANT_HEADING_TEXTS.has(normalize(node.textContent))) continue;
+      // The heading's textContent also includes a print-only "ChatGPT" span
+      // ("ChatGPT said:ChatGPT"), so the role attribute is the stable signal.
+      if (node.getAttribute("data-conversation-role") !== "assistant" &&
+          !ASSISTANT_HEADING_TEXTS.has(normalize(node.textContent))) continue;
       if (node.closest('[data-message-author-role="assistant"]')) continue;
       message = node.closest(".group") || node.parentElement;
       if (!message) continue;
@@ -251,7 +255,14 @@ function isResponseGenerating() {
     'button[data-testid="stop-button"], button[aria-label*="응답 중지"], button[aria-label*="Stop response"]'
   );
   if ([...stopButtons].some(isVisible)) return true;
+  // The composer's stop button has no test id now, only aria-label "Stop".
+  const composerForm = findPromptComposer()?.closest?.("form");
+  if (composerForm && [...composerForm.querySelectorAll("button[aria-label]")].some(button =>
+    STOP_BUTTON_LABEL_PATTERN.test(normalize(button.getAttribute("aria-label"))) && isVisible(button))) return true;
   const latestMessage = getLatestAssistantMessage();
+  // The turn container reports its own state; prefer it over label heuristics.
+  const turnState = latestMessage?.getAttribute?.("data-talvt-turn-state");
+  if (turnState) return turnState === "in_progress";
   if (!latestMessage || !modernAssistantMessages.has(latestMessage)) return false;
   // The current UI has no author-role attribute. Its response actions appear
   // on the containing turn only after the assistant finishes.

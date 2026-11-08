@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Auto Allow Tool",
   "description": "Unofficial helper for chatgpt.com: auto-approves tool permission prompts, refreshes plugin tools, optionally auto-continues.",
-  "version": "0.5.19",
+  "version": "0.5.20",
   "permissions": ["storage"],
   "host_permissions": [
     "https://chatgpt.com/*",

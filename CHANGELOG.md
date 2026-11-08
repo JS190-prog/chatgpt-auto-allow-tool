@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.20
+
+- Fix: automatic continuation never triggered. ChatGPT's assistant heading now reads "ChatGPT said:ChatGPT" (a print-only span is appended), so the exact-text match found no assistant response; the `data-conversation-role="assistant"` attribute is used instead. Generation is now detected from the composer's `Stop` button (no test id any more) and the turn's `data-talvt-turn-state`, instead of waiting for completion-button labels.
+
 ## 0.5.19
 
 - Fix: refresh aborted the whole sweep with "<plugin>: 상세 화면을 열지 못했습니다" when a plugin's detail page had no recognized sections (for example an unconnected GitHub app). Opening a detail now only requires reaching its route; pages with nothing to refresh are skipped by the existing classification step instead of aborting the run.
